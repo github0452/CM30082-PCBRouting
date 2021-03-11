@@ -4,9 +4,8 @@ import configparser
 import os
 
 import torch
-from Misc.TSPEnvironment import TSPEnv
 from Misc.Environments import Construction, Improvement
-from Models.SingleOptPointerNetwork import PtrNet, PntrNetCritic, TrainPointerNetwork
+from Models.SingleOptPointerNetwork import PtrNet, PntrNetCritic, PtrNetWrapped
 from Models.ImprovementTransformer import TSP_improve, TrainImprovementModel
 from torch.utils.tensorboard import SummaryWriter
 
@@ -17,34 +16,37 @@ class TrainTest:
         config.read(path)
         print("Reading config from path", path)
         print(dict({key:dict(value) for (key,value) in config.items()}))
-        #get some parameters
+        # load some parameters
         general_config = config['general']
         self.train_batch_size = int(general_config['train_batch_size'])
         self.train_batch_epoch = int(general_config['train_batch_epoch'])
-        #CREATE MODEL AND ENVIRONMENT
-        if general_config['model'] == 'PointerNetwork':
-            actor_model = PtrNet(config['actor'])
-            critic_model = PntrNetCritic(config['critic']) if general_config['critic'] == 'True' else None
-            train = TrainPointerNetwork
-        elif general_config['model'] == 'Transformer':
-            actor_model = Transformer(config['actor'])
-            critic_model = None
-            train = None
-        elif general_config['model'] == 'TSP_improve':
-            actor_model = TSP_improve(config['actor'])
-            critic_model = None
-            train = TrainImprovementModel
-        models = (actor_model, critic_model)
-        env = {'Construction': Construction(), 'Improvement': Improvement(), 'TSP': TSPEnv()
-            }.get(general_config['environment'])
-        # WRAP THEM IN REINFORCEMENT LEARNING ALGORITHM
-        self.modelWithRlAlg = train(env, models, config['optimiser'])
+        # generate some parameters
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.folder = folder
         self.date = datetime.datetime.now().strftime('%m%d_%H_%M')
         self.n_epoch = 0
+        #=-=-=-=-=-=-=ENVIRONMENTS=-=-=-=-===-=-=-=-=-=-=
+        env = {'Construction': Construction(), 'Improvement': Improvement()
+            }.get(general_config['environment'])
+        #=-=-=-=-===-=-=-=-=-=-=MODEL=-=-=-=-===-=-=-=-=-=-=
+        if general_config['model'] == 'PointerNetwork':
+            self.actor_model = PtrNetWrapped(self.device, env, config['actor'])
+            # critic_model = PntrNetCritic(config['critic']) if general_config['critic'] == 'True' else None
+        elif general_config['model'] == 'Transformer':
+            self.actor_model = Transformer(config['actor'])
+            # critic_model = None
+        elif general_config['model'] == 'TSP_improve':
+            self.actor_model = TSP_improve(config['actor'])
+            # critic_model = None
+        # models = (actor_model, critic_model)
+        #=-=-=-=-=REINFORCEMENT learning algorithm=-=-=-=-=-=-=-=
+        if general_config['reinforcementLearningAlg'] == 'A2C':
+            self.actor_trainer = A2C(self.actor_model, config['optimiser'], config['critic'])
+        elif general_config['reinforcementLearningAlg'] == 'REINFORCE':
+            pass
 
     def train(self, problem_size, data_type="tensor", data_loc=None):
-        # create files, setup stuff
+        # create files, setup stuff for SAVING DATA
         if data_type is "csv":
             csv_path = '{0}/{1}_train_data.csv'.format(self.folder, self.date)
             with open(csv_path, 'w', newline='') as file:
@@ -63,7 +65,14 @@ class TrainTest:
             data_loc = [None for _ in range(self.train_batch_epoch)]
         # loop through batches
         for i, path in zip(range((self.n_epoch*self.train_batch_epoch), (self.n_epoch*self.train_batch_epoch)+self.train_batch_epoch), data_loc):
-            R, loss = self.modelWithRlAlg.train(self.train_batch_size, problem_size, data_loc=path)
+            # generate problems
+            if path is None:
+                problems = self.env.gen(self.train_batch_size, problem_size)
+            else:
+                #load the dataset
+                problems = self.env.load(self.train_batch_size, batch_size)
+            #pass it through A2C thingy to train
+            R, loss = self.train.train(problems)
             R_routed = [x for x in R if (x != 10000)]
             avgR = R.mean().item()
             if len(R_routed) != 0:
@@ -128,14 +137,14 @@ class TrainTest:
         self.n_epoch = epoch
 
 # MODEL
-folder = 'runs/ImprovementTsp'
+folder = 'runs/PointerNetwork_con'
 agent = TrainTest(folder)
 # agent.load(9)
 
 #TRAINING TESTING DETAILS
-n_epochs = 200
-test_batch_size = 10000
-prob_size = 20
+n_epochs = 10
+test_batch_size = 1000
+prob_size = 5
 print("Number of epochs: {0}".format(n_epochs))
 
 # agent.test(test_batch_size, prob_size, override_step=0)
