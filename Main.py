@@ -7,8 +7,8 @@ import torch
 from torch.utils.tensorboard import SummaryWriter
 
 from Misc.Environments import Construction, Improvement
-from Models.ConstructionPointerNetwork import PtrNet, PtrNetWrapped
-from Models.ImprovementTransformer import TSP_improve, TSP_improveWrapped
+from Models.ConstructionPointerNetwork import PtrNetWrapped
+from Models.ImprovementTransformer import TSP_improveWrapped
 from RLAlgorithm.PolicyBasedTrainer import Reinforce, A2C
 
 class TrainTest:
