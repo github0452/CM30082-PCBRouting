@@ -6,7 +6,8 @@ import os
 import torch
 from Misc.Environments import Construction, Improvement
 from Models.SingleOptPointerNetwork import PtrNet, PntrNetCritic, PtrNetWrapped
-from Models.ImprovementTransformer import TSP_improve, TrainImprovementModel
+from Models.ImprovementTransformer import TSP_improve, TSP_improveWrapped
+from RLAlgorithm.MCTD import MonteCarlo, TemporalDifference
 from RLAlgorithm.policybased import Reinforce, A2C
 from torch.utils.tensorboard import SummaryWriter
 
@@ -27,7 +28,7 @@ class TrainTest:
         self.date = datetime.datetime.now().strftime('%m%d_%H_%M')
         self.n_epoch = 0
         #=-=-=-=-=-=-=ENVIRONMENTS=-=-=-=-===-=-=-=-=-=-=
-        self.env = {'Construction': Construction(), 'Improvement': Improvement()
+        self.env = {'Construction': Construction(), 'Improvement': Improvement(config['environment'])
             }.get(general_config['environment'])
         #=-=-=-=-===-=-=-=-=-=-=MODEL=-=-=-=-===-=-=-=-=-=-=
         if general_config['model'] == 'PointerNetwork':
@@ -41,6 +42,10 @@ class TrainTest:
             self.actor_trainer = A2C(self.actor_model, config['optimiser'], config['critic'])
         elif general_config['trainer'] == 'REINFORCE':
             self.actor_trainer = Reinforce(self.actor_model, config['optimiser'], config['baseline'])
+        if general_config['trainer2'] == 'MC':
+            self.actor_trainer = MonteCarlo(self.actor_trainer)
+        elif general_config['trainer2'] =='TD':
+            self.actor_trainer = TemporalDifference(self.actor_trainer)
 
     def train(self, problem_size, data_type="tensor", data_loc=None):
         # create files, setup stuff for SAVING DATA
@@ -66,7 +71,7 @@ class TrainTest:
             if path is None:
                 problems = self.env.gen(self.train_batch_size, problem_size)
             else:
-                problems = self.env.load(self.train_batch_size, batch_size)
+                problems = self.env.load(path, self.train_batch_size)
             #pass it through reinforcement learning algorithm to train
             R, loss = self.actor_trainer.train(problems)
             R_routed = [x for x in R if (x != 10000)]
@@ -104,8 +109,13 @@ class TrainTest:
         elif data_type is "tensor":
             tensor_path = '{0}/{1}_tensor'.format(self.folder, self.date)
             t_board = SummaryWriter(tensor_path)
+        # generate or load problems
+        if data_loc is None:
+            problems = self.env.gen(batch_size, problem_size)
+        else:
+            problems = self.env.load(data_loc, batch_size)
         # run tests
-        R = self.actor_model.test(batch_size, problem_size, data_loc=data_loc)
+        R = self.actor_model.test(problems)
         R_routed = [x for x in R if (x != 10000)]
         avgR = R.mean().item()
         if len(R_routed) != 0:
@@ -126,13 +136,13 @@ class TrainTest:
     def save(self):
         file_path = "{0}/backup-epoch{1}".format(self.folder, self.n_epoch)
         model_dict = {}
-        model_dict = self.actor_trainer.save(model_dict) #save training details
+        model_dict = self.actor_trainer.rlAlg.save(model_dict) #save training details
         torch.save(model_dict, file_path)
 
     def load(self, epoch):
         file_path = "{0}/backup-epoch{1}".format(self.folder, epoch)
         checkpoint = torch.load(file_path)
-        self.actor_trainer.load(checkpoint) #load training details
+        self.actor_trainer.rlAlg.load(checkpoint) #load training details
         self.n_epoch = epoch
 
 # MODEL
@@ -146,14 +156,13 @@ test_batch_size = 1000
 prob_size = 5
 print("Number of epochs: {0}".format(n_epochs))
 
-# agent.test(test_batch_size, prob_size, override_step=0)
+agent.test(test_batch_size, prob_size, override_step=0)
 for j in range(n_epochs):
     #loop through batches of the test problems
     agent.train(prob_size)#, data_loc="datasets/n5b10(1).pkg")
     agent.test(test_batch_size, prob_size)#, data_loc="datasets/n5b1(1).pkg")
     #, data_loc="datasets/n5b10(1).pkg")
-    if j % 20 == 0:
-        agent.save()
+    agent.save()
     print("Finished epoch: {0}".format(j))
 # i += 1
 # for j in range(i, i+n_epochs):
@@ -163,5 +172,5 @@ for j in range(n_epochs):
 #     train.train_epoch(n_batch_in_epoch, train_batch_size, test_batch_size, 9, j)
 #
 # for prob_size in [3, 4, 5, 6, 8]:
-#     agent.load(9)
+#     agent.load(10)
 #     agent.test(1000, prob_size, "console")

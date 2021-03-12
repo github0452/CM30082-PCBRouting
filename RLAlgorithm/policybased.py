@@ -35,7 +35,7 @@ class Reinforce:
         if baseline_config['baselineType'] == 'ExpMovingAvg':
             self.baseline = ExpMovingAvg()
 
-    def train(self, problems):
+    def train(self, problems, reward, probs):
         reward, probs = self.actor.train(problems)
         advantage = reward - self.baseline.update(reward).detach()
         logprobs = torch.log(probs)
@@ -60,7 +60,7 @@ class Reinforce:
         return model_dict
 
     def load(self, checkpoint):
-        self.actor.load_state_dict(checkpoint['actor_model_state_dict'])
+        self.actor.actor.load_state_dict(checkpoint['actor_model_state_dict'])
         self.actor_optimizer.load_state_dict(checkpoint['actor_optimizer_state_dict'])
         self.actor_scheduler.load_state_dict(checkpoint['actor_schedular_state_dict'])
         self.baseline.load(checkpoint)
@@ -79,9 +79,7 @@ class A2C:
     def additonal_params(self):
         return ['actor_loss', 'critic_loss']
 
-    def train(self, problems):
-        #pass through model and additional method to get reward and probs
-        reward, probs = self.actor.train(problems)
+    def train(self, problems, reward, probs):
         critic_reward = self.critic(problems.detach())
         # train critic
         critic_loss = self.critic_mse_loss(reward, critic_reward)
@@ -98,7 +96,7 @@ class A2C:
         # update the weights using optimiser
         self.actor_optimizer.zero_grad()
         actor_loss.backward() # calculate gradient backpropagation
-        torch.nn.utils.clip_grad_norm_(self.actor.parameters(), self.max_g, norm_type=2) # to prevent gradient expansion, set max
+        torch.nn.utils.clip_grad_norm_(self.actor.actor.parameters(), self.max_g, norm_type=2) # to prevent gradient expansion, set max
         self.actor_optimizer.step() # update weights
         self.actor_scheduler.step() #TOD IN LATER LAYER?
         return actual_R, {'actor_loss': actor_loss, 'critic_loss': critic_loss}
@@ -113,7 +111,7 @@ class A2C:
         return model_dict
 
     def load(self, checkpoint):
-        self.actor.load_state_dict(checkpoint['actor_model_state_dict'])
+        self.actor.actor.load_state_dict(checkpoint['actor_model_state_dict'])
         self.actor_optimizer.load_state_dict(checkpoint['actor_optimizer_state_dict'])
         self.actor_scheduler.load_state_dict(checkpoint['actor_schedular_state_dict'])
         self.critic.load_state_dict(checkpoint['critic_model_state_dict'])

@@ -146,15 +146,13 @@ class PntrNetCritic(nn.Module):
 # SAVE/LOAD - save or load a copy of the model
 
 # **REINFORCE policy-based method**
+#how the model output is returned into reward and probability
 class PtrNetWrapped: #wrapper for model
     # creates the everything around the networks
     def __init__(self, device, env, model_config): # hyperparameteres
         self.device = device
         self.env = env
         self.actor = PtrNet(model_config).to(self.device)
-
-    def additonal_params(self):
-        return ['actor_loss', 'critic_loss']
 
     # given a problem size and batch size will train the model
     def train(self, problems):
@@ -170,14 +168,9 @@ class PtrNetWrapped: #wrapper for model
         return reward, probability
 
     # given a batch size and problem size will test the model
-    def test(self, batch_size, problem_size, data_loc=None):
+    def test(self, problems):
         self.actor.eval()
-        # generate problems
-        if data_loc is None:
-            problems = self.env.gen(batch_size, problem_size).to(self.device)
-        else:
-            #load the dataset
-            problems = self.env.load(data_loc, batch_size).to(self.device)
+        problems = problems.to(self.device)
         action_probs_list, action_list = self.actor(problems, sampling=True)
         R = self.env.evaluate(problems, action_list.transpose(0, 1)).to(self.device)
         return R
