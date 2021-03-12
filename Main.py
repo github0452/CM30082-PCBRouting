@@ -4,11 +4,12 @@ import configparser
 import os
 
 import torch
+from torch.utils.tensorboard import SummaryWriter
+
 from Misc.Environments import Construction, Improvement
 from Models.ConstructionPointerNetwork import PtrNet, PtrNetWrapped
 from Models.ImprovementTransformer import TSP_improve, TSP_improveWrapped
-from RLAlgorithm.policybased import Reinforce, A2C
-from torch.utils.tensorboard import SummaryWriter
+from RLAlgorithm.PolicyBasedTrainer import Reinforce, A2C
 
 class TrainTest:
     def __init__(self, folder):
@@ -127,7 +128,7 @@ class TrainTest:
         self.n_epoch = epoch
 
 # MODEL
-folder = 'runs/PointerNetwork_con'
+folder = 'runs/Improvement'
 agent = TrainTest(folder)
 # agent.load(9)
 
