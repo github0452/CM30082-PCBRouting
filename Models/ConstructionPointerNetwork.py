@@ -9,7 +9,6 @@ import random
 import numpy as np
 
 from Models.GeneralLayers import *
-from Models.TransformerWIP import TEncoder
 
 class BahdanauAttention(nn.Module):
     def __init__(self, dim_model, compatabilit='add'):
