@@ -98,63 +98,76 @@ class TSP_improve(nn.Module):
         return selected_likelihood, pair
 
 class TSP_improveWrapped:
-    def __init__(self, device, env, model_config):
+    def __init__(self, env, trainer, model_config, trainer_config):
         # set variables
-        self.device = device
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.env = env
-        self.T = float(config['T'])
         self.actor = TSP_improve(model_config).to(self.device)
+        self.trainer = trainer
+        self.trainer.passIntoParameters(self.actor.parameters(), trainer_config)
 
     # given a problem size and batch size will train the model
-    def train(self, problems):
-        problems = problems.to(self.device)
-        batch_size, problem_size, _ = problems
-        solutions = self.env.getInitialSolution(batch_size, problem_size).to(self.device)
-        #tracking information about the sequence
-        best_so_far = self.env.evaluate(problems, solutions) #[batch_size]
-        initial_reward = best_so_far.clone() #INFO
-        action_history = [] #INFO
-        reward_history = [] #INFO
+    def train(self, n_batch, p_size, path=None):
+        problems = self.env.gen(n_batch, p_size).to(self.device) if (path is None) else self.env.load(path, n_batch).to(self.device) # generate or load problems
+        # setup inital parameters
+        solutions = self.env.getInitialSolution(n_batch, p_size).to(self.device)
         exchange = None
+        # tracking stuff for information
+        action_history = [] #INFO
+        state_history = [state]
+        reward_history = [] #INFO
+        total_reward = 0
+        total_loss = 0
         # run through the model
-        t = 0
-        self.M_actor.train()
-        while t < self.T:
-            likelihood, exchange = self.actor(problems, solutions, exchange) #
-            solutions = self.env.nextState(solutions, exchange)
-            #calc reward_history
+        self.rlAlg.actor.train()
+        while self.env.isDone():
+            probability, exchange = self.rlAlg.actor(problems, state, exchange)
+            next_state = self.env.step(state, exchange)
+            # calculate reward
             cost = self.env.evaluate(problems, solutions)
             best_for_now = torch.cat((best_so_far[None, :], cost[None, :]), 0).min(0)[0]
-            reward_history.append(cost)
-            action_history.append(exchange)
             reward = best_for_now - best_so_far
-            # reward = reward - best_so_far  #low is good
-            best_so_far = best_for_now
-            t = t + 1
-            log_lh = torch.log(likelihood).to(reward.device)
-            # log_lh[log_lh < -1000] = 0.
-            print("reward", reward[0:10])
-            #USE policybased thingy
-        #return reward, probability
+            #save things
+            reward_history.append(cost)
+            action_history.append(action)
+            state_history.append(next_state)
+            # train
+            R, loss = self.trainer.train(problems, reward, probs)
+            total_reward += R
+            total_loss += loss
+            #update for next iteration
+            state = next_state
+            best_for_now = best_for_now
+        return total_reward, total_loss
 
     # given a batch size and problem size will test the model
-    def test(self, batch_size, problem_size, data_loc=None):
-        self.M_actor.eval()
-        # generate problems and initial solutions
-        problems = problems.to(self.device)
-        batch_size, problem_size, _ = problems
-        solutions = self.env.getInitialSolution(batch_size, problem_size).to(self.device)
-        #tracking information about the sequence
+    def test(self, n_batch, p_size, path=None):
+        problems = self.env.gen(n_batch, p_size).to(self.device) if (path is None) else self.env.load(path, n_batch).to(self.device) # generate or load problems
+        # setup inital parameters
+        solutions = self.env.getInitialSolution(n_batch, p_size).to(self.device)
         R = self.env.evaluate(problems, solutions) #[batch_size]
-        # run through the model
+        best_so_far = Environment.evaluate(problems, solutions)
         exchange = None
         t = 0
+        # pass through model
+        # run through the model
         self.M_actor.eval()
         while t < self.T:
-            likelihood, exchange = self.M_actor(problems, solutions, exchange)
+            #pass through model
+            _, exchange = self.rlAlg.actor(problems, state, exchange)
             solutions = self.env.nextState(solutions, exchange)
-            # solutions = self.env.nextState(solutions, exchange.detach())
-            reward = self.env.evaluate(problems, solutions)
+            cost = self.env.evaluate(problems, solutions)
             R = torch.cat((R[None, :], reward[None, :]), 0).min(0)[0]
-            t = t + 1
+            #setup for next round
+            t += 1
         return R
+
+    def save(self):
+        model_dict = {}
+        model_dict['actor_model_state_dict'] = self.actor.actor.state_dict()
+        model_dict.update(self.trainer.save())
+        return model_dict
+
+    def load(self, checkpoint):
+        self.actor.actor.load_state_dict(checkpoint['actor_model_state_dict'])
+        self.trainer.load(checkpoint)

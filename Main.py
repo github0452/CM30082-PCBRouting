@@ -5,9 +5,8 @@ import os
 
 import torch
 from Misc.Environments import Construction, Improvement
-from Models.SingleOptPointerNetwork import PtrNet, PntrNetCritic, PtrNetWrapped
+from Models.ConstructionPointerNetwork import PtrNet, PtrNetWrapped
 from Models.ImprovementTransformer import TSP_improve, TSP_improveWrapped
-from RLAlgorithm.MCTD import MonteCarlo, TemporalDifference
 from RLAlgorithm.policybased import Reinforce, A2C
 from torch.utils.tensorboard import SummaryWriter
 
@@ -23,31 +22,24 @@ class TrainTest:
         self.train_batch_size = int(general_config['train_batch_size'])
         self.train_batch_epoch = int(general_config['train_batch_epoch'])
         # generate some parameters
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.folder = folder
         self.date = datetime.datetime.now().strftime('%m%d_%H_%M')
         self.n_epoch = 0
         #=-=-=-=-=-=-=ENVIRONMENTS=-=-=-=-===-=-=-=-=-=-=
-        self.env = {'Construction': Construction(), 'Improvement': Improvement(config['environment'])
+        env = {'Construction': Construction(), 'Improvement': Improvement()
             }.get(general_config['environment'])
+        #=-=-=-=-=-=-=TRAINER=-=-=-=-===-=-=-=-=-=-=
+        if general_config['trainer'] == 'A2C':
+            trainer = A2C(config['critic'])
+        elif general_config['trainer'] == 'REINFORCE':
+            trainer = Reinforce(config['baseline'])
         #=-=-=-=-===-=-=-=-=-=-=MODEL=-=-=-=-===-=-=-=-=-=-=
         if general_config['model'] == 'PointerNetwork':
-            self.actor_model = PtrNetWrapped(self.device, self.env, config['actor'])
-        elif general_config['model'] == 'Transformer':
-            self.actor_model = Transformer(config['actor']) #TODO
+            self.wrapped_actor = PtrNetWrapped(env, trainer, config['actor'], config['optimiser'])
         elif general_config['model'] == 'TSP_improve':
-            self.actor_model = TSP_improve(config['actor']) #TODO
-        #=-=-=-=-=REINFORCEMENT learning algorithm=-=-=-=-=-=-=-=
-        if general_config['trainer'] == 'A2C':
-            self.actor_trainer = A2C(self.actor_model, config['optimiser'], config['critic'])
-        elif general_config['trainer'] == 'REINFORCE':
-            self.actor_trainer = Reinforce(self.actor_model, config['optimiser'], config['baseline'])
-        if general_config['trainer2'] == 'MC':
-            self.actor_trainer = MonteCarlo(self.actor_trainer)
-        elif general_config['trainer2'] =='TD':
-            self.actor_trainer = TemporalDifference(self.actor_trainer)
+            self.wrapped_actor = TSP_improveWrapped(env, trainer, config['actor'], config['optimiser'])
 
-    def train(self, problem_size, data_type="tensor", data_loc=None):
+    def train(self, p_size, data_type="tensor", data_loc=None):
         # create files, setup stuff for SAVING DATA
         if data_type is "csv":
             csv_path = '{0}/{1}_train_data.csv'.format(self.folder, self.date)
@@ -67,13 +59,8 @@ class TrainTest:
             data_loc = [None for _ in range(self.train_batch_epoch)]
         # loop through batches
         for i, path in zip(range((self.n_epoch*self.train_batch_epoch), (self.n_epoch*self.train_batch_epoch)+self.train_batch_epoch), data_loc):
-            # generate or load problems
-            if path is None:
-                problems = self.env.gen(self.train_batch_size, problem_size)
-            else:
-                problems = self.env.load(path, self.train_batch_size)
             #pass it through reinforcement learning algorithm to train
-            R, loss = self.actor_trainer.train(problems)
+            R, loss = self.wrapped_actor.train(self.train_batch_size, p_size)
             R_routed = [x for x in R if (x != 10000)]
             avgR = R.mean().item()
             if len(R_routed) != 0:
@@ -94,7 +81,7 @@ class TrainTest:
                     t_board.add_scalar('Train/{0}'.format(k), loss[k], global_step = i)
         self.n_epoch += 1
 
-    def test(self, batch_size, problem_size, data_type="tensor", data_loc=None, override_step=None):
+    def test(self, n_batch, p_size, data_type="tensor", path=None, override_step=None):
         if override_step is not None:
             epoch = override_step
         else:
@@ -109,18 +96,13 @@ class TrainTest:
         elif data_type is "tensor":
             tensor_path = '{0}/{1}_tensor'.format(self.folder, self.date)
             t_board = SummaryWriter(tensor_path)
-        # generate or load problems
-        if data_loc is None:
-            problems = self.env.gen(batch_size, problem_size)
-        else:
-            problems = self.env.load(data_loc, batch_size)
         # run tests
-        R = self.actor_model.test(problems)
+        R = self.wrapped_actor.test(n_batch, p_size, path)
         R_routed = [x for x in R if (x != 10000)]
         avgR = R.mean().item()
         if len(R_routed) != 0:
             avgRoutedR = sum(R_routed)/len(R_routed)
-            percRouted = len(R_routed)*100/batch_size
+            percRouted = len(R_routed)*100/n_batch
         else:
             avgRoutedR = 10000
             percRouted = 0.
@@ -131,18 +113,17 @@ class TrainTest:
             t_board.add_scalar('Test/AvgR', avgR, global_step = epoch)
             t_board.add_scalar('Test/AvgRouted%', percRouted, global_step = epoch)
         elif data_type is "console":
-            print("Prob size: {0}, avgRoutedR: {1}, percRouted: {2}".format(problem_size, avgRoutedR, percRouted))
+            print("Prob size: {0}, avgRoutedR: {1}, percRouted: {2}".format(p_size, avgRoutedR, percRouted))
 
     def save(self):
         file_path = "{0}/backup-epoch{1}".format(self.folder, self.n_epoch)
-        model_dict = {}
-        model_dict = self.actor_trainer.rlAlg.save(model_dict) #save training details
+        model_dict = self.wrapped_actor.trainer.save() #save training details
         torch.save(model_dict, file_path)
 
     def load(self, epoch):
         file_path = "{0}/backup-epoch{1}".format(self.folder, epoch)
         checkpoint = torch.load(file_path)
-        self.actor_trainer.rlAlg.load(checkpoint) #load training details
+        self.actor_trainer.trainer.load(checkpoint) #load training details
         self.n_epoch = epoch
 
 # MODEL
@@ -152,24 +133,24 @@ agent = TrainTest(folder)
 
 #TRAINING TESTING DETAILS
 n_epochs = 10
-test_batch_size = 1000
+test_n_batch = 1000
 prob_size = 5
 print("Number of epochs: {0}".format(n_epochs))
 
-agent.test(test_batch_size, prob_size, override_step=0)
+agent.test(test_n_batch, prob_size, override_step=0)
 for j in range(n_epochs):
     #loop through batches of the test problems
     agent.train(prob_size)#, data_loc="datasets/n5b10(1).pkg")
-    agent.test(test_batch_size, prob_size)#, data_loc="datasets/n5b1(1).pkg")
+    agent.test(test_n_batch, prob_size)#, data_loc="datasets/n5b1(1).pkg")
     #, data_loc="datasets/n5b10(1).pkg")
     agent.save()
     print("Finished epoch: {0}".format(j))
 # i += 1
 # for j in range(i, i+n_epochs):
-#     train.train_epoch(n_batch_in_epoch, train_batch_size, test_batch_size, 7, j)
+#     train.train_epoch(n_batch_in_epoch, train_batch_size, test_n_batch, 7, j)
 # i += 1
 # for j in range(i, i+n_epochs):
-#     train.train_epoch(n_batch_in_epoch, train_batch_size, test_batch_size, 9, j)
+#     train.train_epoch(n_batch_in_epoch, train_batch_size, test_n_batch, 9, j)
 #
 # for prob_size in [3, 4, 5, 6, 8]:
 #     agent.load(10)

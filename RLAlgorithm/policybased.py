@@ -4,6 +4,8 @@ import torch.optim as optim
 import torch.nn.functional as F
 from torch.autograd import Variable
 
+from Models.ConstructionPointerNetwork import PntrNetCritic
+
 import math
 import random
 import numpy as np
@@ -19,7 +21,8 @@ class ExpMovingAvg:
             self.TRACK_critic_exp_mvg_avg = (self.TRACK_critic_exp_mvg_avg * 0.9) + (newReward.detach().mean() * 0.1)
         return self.TRACK_critic_exp_mvg_avg
 
-    def save(self, model_dict):
+    def save(self):
+        model_dict = {}
         model_dict['critic_exp_mvg_avg'] = self.TRACK_critic_exp_mvg_avg
         return model_dict
 
@@ -27,16 +30,20 @@ class ExpMovingAvg:
         self.TRACK_critic_exp_mvg_avg = checkpoint['critic_exp_mvg_avg']
 
 class Reinforce:
-    def __init__(self, actor, algorithm_config, baseline_config):
-        self.actor = actor
-        self.actor_optimizer = optim.Adam(self.actor.actor.parameters(), lr=float(algorithm_config['actor_lr']))
-        self.actor_scheduler = torch.optim.lr_scheduler.StepLR(self.actor_optimizer, step_size=1, gamma=float(algorithm_config['actor_lr_gamma']))
-        self.max_g = float(algorithm_config['maxGrad'])
+    def __init__(self, baseline_config):
         if baseline_config['baselineType'] == 'ExpMovingAvg':
             self.baseline = ExpMovingAvg()
 
+    def passIntoParameters(self, parameters, optimizer_config):
+        self.actor_param = parameters
+        self.actor_optimizer = optim.Adam(parameters, lr=float(optimizer_config['actor_lr']))
+        self.actor_scheduler = torch.optim.lr_scheduler.StepLR(self.actor_optimizer, step_size=1, gamma=float(optimizer_config['actor_lr_gamma']))
+        self.max_g = float(optimizer_config['maxGrad'])
+
     def train(self, problems, reward, probs):
-        reward, probs = self.actor.train(problems)
+        # reward is what the model is training to minimize
+        # probs is the probability that it took whatever set of actions led to this reward
+        # problems is so that the critic can analyse it
         advantage = reward - self.baseline.update(reward).detach()
         logprobs = torch.log(probs)
         reinforce = (advantage * logprobs)
@@ -44,7 +51,7 @@ class Reinforce:
         # update the weights using optimiser
         self.actor_optimizer.zero_grad()
         actor_loss.backward() # calculate gradient backpropagation
-        torch.nn.utils.clip_grad_norm_(self.actor.actor.parameters(), self.max_g, norm_type=2) # to prevent gradient expansion, set max
+        torch.nn.utils.clip_grad_norm_(self.actor_param, self.max_g, norm_type=2) # to prevent gradient expansion, set max
         self.actor_optimizer.step() # update weights
         self.actor_scheduler.step()
         return reward, {'actor_loss': actor_loss}
@@ -52,29 +59,31 @@ class Reinforce:
     def additonal_params(self):
         return ['actor_loss']
 
-    def save(self, model_dict):
-        model_dict['actor_model_state_dict'] = self.actor.actor.state_dict()
+    def save(self):
+        model_dict = {}
         model_dict['actor_optimizer_state_dict'] = self.actor_optimizer.state_dict()
         model_dict['actor_schedular_state_dict'] = self.actor_scheduler.state_dict()
-        model_dict = self.baseline.save(model_dict)
+        model_dict.update(self.baseline.save())
         return model_dict
 
     def load(self, checkpoint):
-        self.actor.actor.load_state_dict(checkpoint['actor_model_state_dict'])
         self.actor_optimizer.load_state_dict(checkpoint['actor_optimizer_state_dict'])
         self.actor_scheduler.load_state_dict(checkpoint['actor_schedular_state_dict'])
         self.baseline.load(checkpoint)
 
 class A2C:
-    def __init__(self, actor, algorithm_config, critic_config):
-        self.actor = actor
-        self.actor_optimizer = optim.Adam(self.actor.actor.parameters(), lr=float(algorithm_config['actor_lr']))
-        self.actor_scheduler = torch.optim.lr_scheduler.StepLR(self.actor_optimizer, step_size=1, gamma=float(algorithm_config['actor_lr_gamma']))
-        self.critic = PntrNetCritic(critic_config)
-        self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=float(algorithm_config['critic_lr']))
-        self.critic_scheduler = torch.optim.lr_scheduler.StepLR(self.critic_optimizer, step_size=1, gamma=float(algorithm_config['critic_lr_gamma']))
+    def __init__(self, critic_config):
+        if critic_config['model_type'] == 'PointerNetwork':
+            self.wrapped_actor = PntrNetCritic(critic_config)
+        self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=float(critic_config['critic_lr']))
+        self.critic_scheduler = torch.optim.lr_scheduler.StepLR(self.critic_optimizer, step_size=1, gamma=float(critic_config['critic_lr_gamma']))
         self.critic_mse_loss = nn.MSELoss()
-        self.max_g = float(algorithm_config['maxGrad'])
+
+    def passIntoParameters(self, parameters, optimizer_config):
+        self.actor_param = parameters
+        self.actor_optimizer = optim.Adam(parameters, lr=float(optimizer_config['actor_lr']))
+        self.actor_scheduler = torch.optim.lr_scheduler.StepLR(self.actor_optimizer, step_size=1, gamma=float(optimizer_config['actor_lr_gamma']))
+        self.max_g = float(optimizer_config['maxGrad'])
 
     def additonal_params(self):
         return ['actor_loss', 'critic_loss']
@@ -96,13 +105,13 @@ class A2C:
         # update the weights using optimiser
         self.actor_optimizer.zero_grad()
         actor_loss.backward() # calculate gradient backpropagation
-        torch.nn.utils.clip_grad_norm_(self.actor.actor.parameters(), self.max_g, norm_type=2) # to prevent gradient expansion, set max
+        torch.nn.utils.clip_grad_norm_(self.actor_param, self.max_g, norm_type=2) # to prevent gradient expansion, set max
         self.actor_optimizer.step() # update weights
         self.actor_scheduler.step() #TOD IN LATER LAYER?
         return actual_R, {'actor_loss': actor_loss, 'critic_loss': critic_loss}
 
-    def save(self, model_dict):
-        model_dict['actor_model_state_dict'] = self.actor.actor.state_dict()
+    def save(self):
+        model_dict = {}
         model_dict['actor_optimizer_state_dict'] = self.actor_optimizer.state_dict()
         model_dict['actor_schedular_state_dict'] = self.actor_scheduler.state_dict()
         model_dict['critic_model_state_dict'] = self.critic.state_dict()
@@ -111,7 +120,6 @@ class A2C:
         return model_dict
 
     def load(self, checkpoint):
-        self.actor.actor.load_state_dict(checkpoint['actor_model_state_dict'])
         self.actor_optimizer.load_state_dict(checkpoint['actor_optimizer_state_dict'])
         self.actor_scheduler.load_state_dict(checkpoint['actor_schedular_state_dict'])
         self.critic.load_state_dict(checkpoint['critic_model_state_dict'])

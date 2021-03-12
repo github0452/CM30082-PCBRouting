@@ -70,15 +70,12 @@ class Construction(Environment):
         return 'Construction'
 
 class Improvement(Environment):
-    def __init__(self, T):
-        self.T = T
-        self.t = 0
+    def __init__(self):
+        pass
 
     def getStartingState(self, list_size, prob_size):
         initial_solution = torch.linspace(0, prob_size-1, steps=prob_size)
         initial_solution = initial_solution.expand(list_size, prob_size)
-        self.best_so_far = Environment.evaluate(problems, orders)
-        self.t = 0
         return initial_solution
 
     def step(self, cur_state, step):
@@ -96,16 +93,6 @@ class Improvement(Environment):
                 rec_num[i][loc_of_first] = rec_num[i][loc_of_second]
                 rec_num[i][loc_of_second] = temp
         return torch.tensor(rec_num).to(device)
-
-    def evaluate(self, problems, orders, prev_reward):
-        cost = Environment.evaluate(problems, orders)
-        best_for_now = torch.cat((self.best_so_far[None, :], cost[None, :]), 0).min(0)[0]
-        reward = best_for_now - self.best_so_far
-        self.best_so_far = best_for_now
-        return reward
-
-    def isDone(self):
-        return self.t >= self.T #if t is larger than T, then true, else false
 
     def isDone(self):
         pass
