@@ -4,11 +4,12 @@ import configparser
 import os
 
 import torch
-from Misc.TSPEnvironment import TSPEnv
-from Misc.Environments import Construction, Improvement
-from Models.SingleOptPointerNetwork import PtrNet, PntrNetCritic, TrainPointerNetwork
-from Models.ImprovementTransformer import TSP_improve, TrainImprovementModel
 from torch.utils.tensorboard import SummaryWriter
+
+from Misc.Environments import Construction, Improvement
+from Models.ConstructionPointerNetwork import PtrNet, PtrNetWrapped
+from Models.ImprovementTransformer import TSP_improve, TSP_improveWrapped
+from RLAlgorithm.PolicyBasedTrainer import Reinforce, A2C
 
 class TrainTest:
     def __init__(self, folder):
@@ -17,34 +18,30 @@ class TrainTest:
         config.read(path)
         print("Reading config from path", path)
         print(dict({key:dict(value) for (key,value) in config.items()}))
-        #get some parameters
+        # load some parameters
         general_config = config['general']
         self.train_batch_size = int(general_config['train_batch_size'])
         self.train_batch_epoch = int(general_config['train_batch_epoch'])
-        #CREATE MODEL AND ENVIRONMENT
-        if general_config['model'] == 'PointerNetwork':
-            actor_model = PtrNet(config['actor'])
-            critic_model = PntrNetCritic(config['critic']) if general_config['critic'] == 'True' else None
-            train = TrainPointerNetwork
-        elif general_config['model'] == 'Transformer':
-            actor_model = Transformer(config['actor'])
-            critic_model = None
-            train = None
-        elif general_config['model'] == 'TSP_improve':
-            actor_model = TSP_improve(config['actor'])
-            critic_model = None
-            train = TrainImprovementModel
-        models = (actor_model, critic_model)
-        env = {'Construction': Construction(), 'Improvement': Improvement(), 'TSP': TSPEnv()
-            }.get(general_config['environment'])
-        # WRAP THEM IN REINFORCEMENT LEARNING ALGORITHM
-        self.modelWithRlAlg = train(env, models, config['optimiser'])
+        # generate some parameters
         self.folder = folder
         self.date = datetime.datetime.now().strftime('%m%d_%H_%M')
         self.n_epoch = 0
+        #=-=-=-=-=-=-=ENVIRONMENTS=-=-=-=-===-=-=-=-=-=-=
+        env = {'Construction': Construction(), 'Improvement': Improvement()
+            }.get(general_config['environment'])
+        #=-=-=-=-=-=-=TRAINER=-=-=-=-===-=-=-=-=-=-=
+        if general_config['trainer'] == 'A2C':
+            trainer = A2C(config['critic'])
+        elif general_config['trainer'] == 'REINFORCE':
+            trainer = Reinforce(config['baseline'])
+        #=-=-=-=-===-=-=-=-=-=-=MODEL=-=-=-=-===-=-=-=-=-=-=
+        if general_config['model'] == 'PointerNetwork':
+            self.wrapped_actor = PtrNetWrapped(env, trainer, config['actor'], config['optimiser'])
+        elif general_config['model'] == 'TSP_improve':
+            self.wrapped_actor = TSP_improveWrapped(env, trainer, config['actor'], config['optimiser'])
 
-    def train(self, problem_size, data_type="tensor", data_loc=None):
-        # create files, setup stuff
+    def train(self, p_size, data_type="tensor", data_loc=None):
+        # create files, setup stuff for SAVING DATA
         if data_type is "csv":
             csv_path = '{0}/{1}_train_data.csv'.format(self.folder, self.date)
             with open(csv_path, 'w', newline='') as file:
@@ -53,7 +50,7 @@ class TrainTest:
         elif data_type is "tensor":
             tensor_path = '{0}/{1}_tensor'.format(self.folder, self.date)
             t_board = SummaryWriter(tensor_path)
-        # setup test data if needed
+        # setup test data location if needed
         if data_loc is not None:
             if isinstance(data_loc, str):
                 data_loc = [data_loc for _ in range(self.train_batch_epoch)]
@@ -63,7 +60,8 @@ class TrainTest:
             data_loc = [None for _ in range(self.train_batch_epoch)]
         # loop through batches
         for i, path in zip(range((self.n_epoch*self.train_batch_epoch), (self.n_epoch*self.train_batch_epoch)+self.train_batch_epoch), data_loc):
-            R, loss = self.modelWithRlAlg.train(self.train_batch_size, problem_size, data_loc=path)
+            #pass it through reinforcement learning algorithm to train
+            R, loss = self.wrapped_actor.train(self.train_batch_size, p_size)
             R_routed = [x for x in R if (x != 10000)]
             avgR = R.mean().item()
             if len(R_routed) != 0:
@@ -84,7 +82,7 @@ class TrainTest:
                     t_board.add_scalar('Train/{0}'.format(k), loss[k], global_step = i)
         self.n_epoch += 1
 
-    def test(self, batch_size, problem_size, data_type="tensor", data_loc=None, override_step=None):
+    def test(self, n_batch, p_size, data_type="tensor", path=None, override_step=None):
         if override_step is not None:
             epoch = override_step
         else:
@@ -100,12 +98,12 @@ class TrainTest:
             tensor_path = '{0}/{1}_tensor'.format(self.folder, self.date)
             t_board = SummaryWriter(tensor_path)
         # run tests
-        R = self.modelWithRlAlg.test(batch_size, problem_size, data_loc=data_loc)
+        R = self.wrapped_actor.test(n_batch, p_size, path)
         R_routed = [x for x in R if (x != 10000)]
         avgR = R.mean().item()
         if len(R_routed) != 0:
             avgRoutedR = sum(R_routed)/len(R_routed)
-            percRouted = len(R_routed)*100/batch_size
+            percRouted = len(R_routed)*100/n_batch
         else:
             avgRoutedR = 10000
             percRouted = 0.
@@ -116,44 +114,45 @@ class TrainTest:
             t_board.add_scalar('Test/AvgR', avgR, global_step = epoch)
             t_board.add_scalar('Test/AvgRouted%', percRouted, global_step = epoch)
         elif data_type is "console":
-            print("Prob size: {0}, avgRoutedR: {1}, percRouted: {2}".format(problem_size, avgRoutedR, percRouted))
+            print("Prob size: {0}, avgRoutedR: {1}, percRouted: {2}".format(p_size, avgRoutedR, percRouted))
 
     def save(self):
         file_path = "{0}/backup-epoch{1}".format(self.folder, self.n_epoch)
-        self.modelWithRlAlg.save(file_path)
+        model_dict = self.wrapped_actor.trainer.save() #save training details
+        torch.save(model_dict, file_path)
 
     def load(self, epoch):
         file_path = "{0}/backup-epoch{1}".format(self.folder, epoch)
-        self.modelWithRlAlg.load(file_path)
+        checkpoint = torch.load(file_path)
+        self.actor_trainer.trainer.load(checkpoint) #load training details
         self.n_epoch = epoch
 
 # MODEL
-folder = 'runs/ImprovementTsp'
+folder = 'runs/Improvement'
 agent = TrainTest(folder)
 # agent.load(9)
 
 #TRAINING TESTING DETAILS
-n_epochs = 200
-test_batch_size = 10000
-prob_size = 20
+n_epochs = 10
+test_n_batch = 1000
+prob_size = 5
 print("Number of epochs: {0}".format(n_epochs))
 
-# agent.test(test_batch_size, prob_size, override_step=0)
+agent.test(test_n_batch, prob_size, override_step=0)
 for j in range(n_epochs):
     #loop through batches of the test problems
     agent.train(prob_size)#, data_loc="datasets/n5b10(1).pkg")
-    agent.test(test_batch_size, prob_size)#, data_loc="datasets/n5b1(1).pkg")
+    agent.test(test_n_batch, prob_size)#, data_loc="datasets/n5b1(1).pkg")
     #, data_loc="datasets/n5b10(1).pkg")
-    if j % 20 == 0:
-        agent.save()
+    agent.save()
     print("Finished epoch: {0}".format(j))
 # i += 1
 # for j in range(i, i+n_epochs):
-#     train.train_epoch(n_batch_in_epoch, train_batch_size, test_batch_size, 7, j)
+#     train.train_epoch(n_batch_in_epoch, train_batch_size, test_n_batch, 7, j)
 # i += 1
 # for j in range(i, i+n_epochs):
-#     train.train_epoch(n_batch_in_epoch, train_batch_size, test_batch_size, 9, j)
+#     train.train_epoch(n_batch_in_epoch, train_batch_size, test_n_batch, 9, j)
 #
 # for prob_size in [3, 4, 5, 6, 8]:
-#     agent.load(9)
+#     agent.load(10)
 #     agent.test(1000, prob_size, "console")

@@ -26,7 +26,7 @@ class Environment:
         return torch.FloatTensor(problems)
 
     # problems: torch.Size([100, 5, 4]), orders [5, 100]
-    def evaluate(self, problems, orders):
+    def evaluate(self, problems, orders, additional=None):
         #convert everything to the right format
         seq_len = problems.size(1)
         orders = orders.tolist()
@@ -56,7 +56,7 @@ class Environment:
         return problems
 
 class Construction(Environment):
-    def nextState(self, cur_state, step):
+    def step(self, cur_state, step):
         if cur_state is not None:
             next_state = torch.cat((cur_state, step.unsqueeze(dim=1)), dim=1)
         else:
@@ -70,7 +70,15 @@ class Construction(Environment):
         return 'Construction'
 
 class Improvement(Environment):
-    def nextState(self, cur_state, step):
+    def __init__(self):
+        pass
+
+    def getStartingState(self, list_size, prob_size):
+        initial_solution = torch.linspace(0, prob_size-1, steps=prob_size)
+        initial_solution = initial_solution.expand(list_size, prob_size)
+        return initial_solution
+
+    def step(self, cur_state, step):
         device = cur_state.device
         step_num = step.clone().cpu().numpy()
         rec_num = cur_state.clone().cpu().numpy()
@@ -88,11 +96,6 @@ class Improvement(Environment):
 
     def isDone(self):
         pass
-
-    def getInitialSolution(self, list_size, prob_size):
-        initial_solution = torch.linspace(0, prob_size-1, steps=prob_size)
-        initial_solution = initial_solution.expand(list_size, prob_size)
-        return initial_solution
 
     def getType(self):
         return 'Improvement'
