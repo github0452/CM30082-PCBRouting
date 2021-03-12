@@ -7,6 +7,7 @@ import torch
 from Misc.Environments import Construction, Improvement
 from Models.SingleOptPointerNetwork import PtrNet, PntrNetCritic, PtrNetWrapped
 from Models.ImprovementTransformer import TSP_improve, TrainImprovementModel
+from RLAlgorithm.policybased import Reinforce, A2C
 from torch.utils.tensorboard import SummaryWriter
 
 class TrainTest:
@@ -26,24 +27,20 @@ class TrainTest:
         self.date = datetime.datetime.now().strftime('%m%d_%H_%M')
         self.n_epoch = 0
         #=-=-=-=-=-=-=ENVIRONMENTS=-=-=-=-===-=-=-=-=-=-=
-        env = {'Construction': Construction(), 'Improvement': Improvement()
+        self.env = {'Construction': Construction(), 'Improvement': Improvement()
             }.get(general_config['environment'])
         #=-=-=-=-===-=-=-=-=-=-=MODEL=-=-=-=-===-=-=-=-=-=-=
         if general_config['model'] == 'PointerNetwork':
-            self.actor_model = PtrNetWrapped(self.device, env, config['actor'])
-            # critic_model = PntrNetCritic(config['critic']) if general_config['critic'] == 'True' else None
+            self.actor_model = PtrNetWrapped(self.device, self.env, config['actor'])
         elif general_config['model'] == 'Transformer':
-            self.actor_model = Transformer(config['actor'])
-            # critic_model = None
+            self.actor_model = Transformer(config['actor']) #TODO
         elif general_config['model'] == 'TSP_improve':
-            self.actor_model = TSP_improve(config['actor'])
-            # critic_model = None
-        # models = (actor_model, critic_model)
+            self.actor_model = TSP_improve(config['actor']) #TODO
         #=-=-=-=-=REINFORCEMENT learning algorithm=-=-=-=-=-=-=-=
-        if general_config['reinforcementLearningAlg'] == 'A2C':
+        if general_config['trainer'] == 'A2C':
             self.actor_trainer = A2C(self.actor_model, config['optimiser'], config['critic'])
-        elif general_config['reinforcementLearningAlg'] == 'REINFORCE':
-            pass
+        elif general_config['trainer'] == 'REINFORCE':
+            self.actor_trainer = Reinforce(self.actor_model, config['optimiser'], config['baseline'])
 
     def train(self, problem_size, data_type="tensor", data_loc=None):
         # create files, setup stuff for SAVING DATA
@@ -55,7 +52,7 @@ class TrainTest:
         elif data_type is "tensor":
             tensor_path = '{0}/{1}_tensor'.format(self.folder, self.date)
             t_board = SummaryWriter(tensor_path)
-        # setup test data if needed
+        # setup test data location if needed
         if data_loc is not None:
             if isinstance(data_loc, str):
                 data_loc = [data_loc for _ in range(self.train_batch_epoch)]
@@ -65,14 +62,13 @@ class TrainTest:
             data_loc = [None for _ in range(self.train_batch_epoch)]
         # loop through batches
         for i, path in zip(range((self.n_epoch*self.train_batch_epoch), (self.n_epoch*self.train_batch_epoch)+self.train_batch_epoch), data_loc):
-            # generate problems
+            # generate or load problems
             if path is None:
                 problems = self.env.gen(self.train_batch_size, problem_size)
             else:
-                #load the dataset
                 problems = self.env.load(self.train_batch_size, batch_size)
-            #pass it through A2C thingy to train
-            R, loss = self.train.train(problems)
+            #pass it through reinforcement learning algorithm to train
+            R, loss = self.actor_trainer.train(problems)
             R_routed = [x for x in R if (x != 10000)]
             avgR = R.mean().item()
             if len(R_routed) != 0:
@@ -109,7 +105,7 @@ class TrainTest:
             tensor_path = '{0}/{1}_tensor'.format(self.folder, self.date)
             t_board = SummaryWriter(tensor_path)
         # run tests
-        R = self.modelWithRlAlg.test(batch_size, problem_size, data_loc=data_loc)
+        R = self.actor_model.test(batch_size, problem_size, data_loc=data_loc)
         R_routed = [x for x in R if (x != 10000)]
         avgR = R.mean().item()
         if len(R_routed) != 0:
@@ -129,11 +125,14 @@ class TrainTest:
 
     def save(self):
         file_path = "{0}/backup-epoch{1}".format(self.folder, self.n_epoch)
-        self.modelWithRlAlg.save(file_path)
+        model_dict = {}
+        model_dict = self.actor_trainer.save(model_dict) #save training details
+        torch.save(model_dict, file_path)
 
     def load(self, epoch):
         file_path = "{0}/backup-epoch{1}".format(self.folder, epoch)
-        self.modelWithRlAlg.load(file_path)
+        checkpoint = torch.load(file_path)
+        self.actor_trainer.load(checkpoint) #load training details
         self.n_epoch = epoch
 
 # MODEL

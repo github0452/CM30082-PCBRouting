@@ -103,7 +103,7 @@ class PtrNet(nn.Module):
             if sampling:
                 probs = F.softmax(logits, dim=1) #soft max the probabilities
                 actions = probs.multinomial(1).squeeze(1) # sample an index for each problem in the batch, actions: torch.Size([100])
-            else
+            else:
                 actions = logits.argmax(dim = 1)
                 probs = Variable(torch.zeros(logits.size()), requires_grad = True).to(logits.device)
                 probs[:, actions] = 1
@@ -149,27 +149,9 @@ class PntrNetCritic(nn.Module):
 class PtrNetWrapped: #wrapper for model
     # creates the everything around the networks
     def __init__(self, device, env, model_config): # hyperparameteres
-        # set variables
         self.device = device
-        # self.critic = True if (models[1] is not None) else False
-        # self.max_g = float(config['maxGrad'])
         self.env = env
-        # create models
-        self.M_actor = PtrNet(model_config).to(self.device)
-        # if self.critic and len(models) > 1:
-        #     self.M_critic = models[1].to(self.device)
-        # # setup optimizer
-        # self.M_actor_optim = optim.Adam(self.M_actor.parameters(), lr=float(config['actor_lr']))
-        # self.M_actor_scheduler = torch.optim.lr_scheduler.StepLR(self.M_actor_optim, step_size=1, gamma=float(config['actor_lr_gamma']))
-        # if self.critic:
-        #     self.M_critic_optim   = optim.Adam(self.M_critic.parameters(), lr=float(config['critic_lr']))
-        #     self.M_critic_scheduler = torch.optim.lr_scheduler.StepLR(self.M_critic_optim, step_size=1, gamma=float(config['critic_lr_gamma']))
-        #     self.mse_loss = nn.MSELoss()
-        # else:
-        #     self.TRACK_critic_exp_mvg_avg = None
-
-    def get_model_params(self):
-        return self.M_actor.parameters()
+        self.actor = PtrNet(model_config).to(self.device)
 
     def additonal_params(self):
         return ['actor_loss', 'critic_loss']
@@ -178,82 +160,24 @@ class PtrNetWrapped: #wrapper for model
     def train(self, problems):
         # run through the model
         problems = problems.to(self.device)
-        self.M_actor.train()
-        action_probs_list, action_list = self.M_actor(problems, sampling=True) #action_probs_list (seq_len x [n_batch])
+        self.actor.train()
+        action_probs_list, action_list = self.actor(problems, sampling=True) #action_probs_list (seq_len x [n_batch])
         reward = self.env.evaluate(problems.detach(), action_list.transpose(0, 1)).to(self.device)
         probability = action_probs_list[0]
-        for i in range(1, len(probability)):
+        for i in range(1, len(action_probs_list)):
             probability = probability * action_probs_list[i]
         #get reward and probability
-        return reward, probability #TODO
-        # if self.critic:
-        #     pred_R = self.M_critic(problems.detach())
-        #     critic_loss = self.mse_loss(actual_R, pred_R)
-        #     self.M_critic_optim.zero_grad()
-        #     critic_loss.backward()
-        #     torch.nn.utils.clip_grad_norm_(self.M_critic.parameters(), self.max_g, norm_type=2) # to prevent gradient expansion, set max
-        #     self.M_critic_optim.step()
-        #     self.M_critic_scheduler.step()
-        # else:
-        #     if self.TRACK_critic_exp_mvg_avg is None:
-        #         self.TRACK_critic_exp_mvg_avg = actual_R.detach().mean()
-        #     else:
-        #         self.TRACK_critic_exp_mvg_avg = (self.TRACK_critic_exp_mvg_avg * 0.9) + (0.1 * actual_R.detach().mean())
-        #     pred_R = self.TRACK_critic_exp_mvg_avg
-        #     critic_loss = 0
-        # calculate advantage and solution probability to calculate actor loss
-        # advantage = actual_R - pred_R.detach()
-        # logprobs = 0
-        # for prob in action_probs_list:
-        #     logprob = torch.log(prob)
-        #     logprobs += logprob
-        # logprobs[logprobs < -1000] = 0.
-        # reinforce = (advantage * logprobs)
-        # actor_loss = reinforce.mean()
-        # # update the weights using optimiser
-        # self.M_actor_optim.zero_grad()
-        # actor_loss.backward() # calculate gradient backpropagation
-        # torch.nn.utils.clip_grad_norm_(self.M_actor.parameters(), self.max_g, norm_type=2) # to prevent gradient expansion, set max
-        # self.M_actor_optim.step() # update weights
-        # self.M_actor_scheduler.step()
-        # return actual_R, {'actor_loss': actor_loss, 'critic_loss': critic_loss}
+        return reward, probability
 
     # given a batch size and problem size will test the model
     def test(self, batch_size, problem_size, data_loc=None):
-        self.M_actor.eval()
+        self.actor.eval()
         # generate problems
         if data_loc is None:
             problems = self.env.gen(batch_size, problem_size).to(self.device)
         else:
             #load the dataset
             problems = self.env.load(data_loc, batch_size).to(self.device)
-        action_probs_list, action_list = self.M_actor(problems, 'sampling')
+        action_probs_list, action_list = self.actor(problems, sampling=True)
         R = self.env.evaluate(problems, action_list.transpose(0, 1)).to(self.device)
         return R
-
-    # saves the model
-    def save(self, path):
-        model_dict = {}
-        model_dict['actor_model_state_dict'] = self.M_actor.state_dict()
-        model_dict['actor_optimizer_state_dict'] = self.M_actor_optim.state_dict()
-        model_dict['actor_schedular_state_dict'] = self.M_actor_scheduler.state_dict()
-        if self.critic:
-            model_dict['critic_model_state_dict'] = self.M_critic.state_dict()
-            model_dict['critic_optimizer_state_dict'] = self.M_critic_optim.state_dict()
-            model_dict['critic_scheduler_state_dict'] = self.M_critic_scheduler.state_dict()
-        else:
-            model_dict['critic_exp_mvg_avg'] = self.TRACK_critic_exp_mvg_avg
-        torch.save(model_dict, path)
-
-    # loads the model
-    def load(self, path):
-        checkpoint = torch.load(path)
-        self.M_actor.load_state_dict(checkpoint['actor_model_state_dict'])
-        self.M_actor_optim.load_state_dict(checkpoint['actor_optimizer_state_dict'])
-        self.M_actor_scheduler.load_state_dict(checkpoint['actor_schedular_state_dict'])
-        if self.critic:
-            self.M_critic.load_state_dict(checkpoint['critic_model_state_dict'])
-            self.M_critic_optim.load_state_dict(checkpoint['critic_optimizer_state_dict'])
-            self.M_critic_scheduler.load_state_dict(checkpoint['critic_scheduler_state_dict'])
-        else:
-            self.TRACK_critic_exp_mvg_avg = checkpoint['critic_exp_mvg_avg']
