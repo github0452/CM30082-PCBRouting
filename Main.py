@@ -40,7 +40,7 @@ class TrainTest:
         elif general_config['model'] == 'TSP_improve':
             self.wrapped_actor = TSP_improveWrapped(env, trainer, config['actor'], config['optimiser'])
 
-    def train(self, p_size, data_type="tensor", data_loc=None):
+    def train(self, p_size, data_type="tensor", path=None):
         # create files, setup stuff for SAVING DATA
         if data_type is "csv":
             csv_path = '{0}/{1}_train_data.csv'.format(self.folder, self.date)
@@ -51,17 +51,17 @@ class TrainTest:
             tensor_path = '{0}/{1}_tensor'.format(self.folder, self.date)
             t_board = SummaryWriter(tensor_path)
         # setup test data location if needed
-        if data_loc is not None:
-            if isinstance(data_loc, str):
-                data_loc = [data_loc for _ in range(self.train_batch_epoch)]
-            elif not isinstance(data_loc, list) or len(data_loc) < self.train_batch_epoch:
+        if path is not None:
+            if isinstance(path, str):
+                path = [path for _ in range(self.train_batch_epoch)]
+            elif not isinstance(path, list) or len(path) < self.train_batch_epoch:
                 raise NotImplementedError
         else:
-            data_loc = [None for _ in range(self.train_batch_epoch)]
+            path = [None for _ in range(self.train_batch_epoch)]
         # loop through batches
-        for i, path in zip(range((self.n_epoch*self.train_batch_epoch), (self.n_epoch*self.train_batch_epoch)+self.train_batch_epoch), data_loc):
+        for i, path in zip(range((self.n_epoch*self.train_batch_epoch), (self.n_epoch*self.train_batch_epoch)+self.train_batch_epoch), path):
             #pass it through reinforcement learning algorithm to train
-            R, loss = self.wrapped_actor.train(self.train_batch_size, p_size)
+            R, loss = self.wrapped_actor.train(self.train_batch_size, p_size, path=path)
             R_routed = [x for x in R if (x != 10000)]
             avgR = R.mean().item()
             if len(R_routed) != 0:
@@ -98,7 +98,7 @@ class TrainTest:
             tensor_path = '{0}/{1}_tensor'.format(self.folder, self.date)
             t_board = SummaryWriter(tensor_path)
         # run tests
-        R = self.wrapped_actor.test(n_batch, p_size, path)
+        R = self.wrapped_actor.test(n_batch, p_size, path=path)
         R_routed = [x for x in R if (x != 10000)]
         avgR = R.mean().item()
         if len(R_routed) != 0:
@@ -133,19 +133,21 @@ agent = TrainTest(folder)
 # agent.load(9)
 
 #TRAINING TESTING DETAILS
-n_epochs = 10
+n_epochs = 150
 test_n_batch = 1000
-prob_size = 5
+prob_size = 3
 print("Number of epochs: {0}".format(n_epochs))
-
-agent.test(test_n_batch, prob_size, override_step=0)
+# file = "datasets/n{0}b1(6).pkg".format(prob_size)
+file = "datasets/n{0}b1({1}).pkg".format(prob_size, 10)
+agent.test(test_n_batch, prob_size, override_step=0)#, path=file)
 for j in range(n_epochs):
     #loop through batches of the test problems
-    agent.train(prob_size)#, data_loc="datasets/n5b10(1).pkg")
-    agent.test(test_n_batch, prob_size)#, data_loc="datasets/n5b1(1).pkg")
-    #, data_loc="datasets/n5b10(1).pkg")
-    agent.save()
+    agent.train(prob_size)#, path=file)
+    agent.test(test_n_batch, prob_size)#, path=file)
     print("Finished epoch: {0}".format(j))
+    if j % 50  == 0:
+        agent.save()
+agent.save()
 # i += 1
 # for j in range(i, i+n_epochs):
 #     train.train_epoch(n_batch_in_epoch, train_batch_size, test_n_batch, 7, j)

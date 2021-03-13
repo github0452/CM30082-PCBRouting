@@ -4,13 +4,14 @@ import torch.optim as optim
 import torch.nn.functional as F
 
 import numpy as np
+import math
 
 from Models.GeneralLayers import GraphEmbedding, SkipConnection, MultiHeadAttention, FeedForward, SelfMultiHeadAttention
 
 class EncoderL(nn.Module):
     def __init__(self, n_head, dim_model, dim_hidden, dim_k, dim_v):
         super().__init__() #initialise nn.Modules
-        self.MMA = SelfMultiHeadAttention(n_head, dim_model, dim_k, dim_v)
+        self.MMA = SkipConnection(SelfMultiHeadAttention(n_head, dim_model, dim_k, dim_v))
         self.norm_1 = nn.LayerNorm(dim_model, eps=1e-6)
         self.FF = SkipConnection(FeedForward(dim_model, dim_hidden))
         self.norm_2 = nn.LayerNorm(dim_model, eps=1e-6)
@@ -18,12 +19,10 @@ class EncoderL(nn.Module):
     # inputs: [batch_size, seq_len, embedding_size]
     # outputs: [batch_size, seq_len, embedding_size]
     def forward(self, inputs):
-        # residual = inputs
         enc_output = self.MMA(inputs) #how is the multihead attention pulled together? mean? addition?
-        # enc_output = enc_output + residual
-        # enc_output = self.norm_1(enc_output)
+        enc_output = self.norm_1(enc_output)
         enc_output = self.FF(enc_output)
-        # enc_output = self.norm_2(enc_output)
+        enc_output = self.norm_2(enc_output)
         return enc_output
 
 class Compatability(nn.Module):
@@ -32,7 +31,13 @@ class Compatability(nn.Module):
         self.n_heads = 1
         self.W_query = nn.Parameter(torch.Tensor(dim_model, self.n_heads*dim_key))
         self.W_key = nn.Parameter(torch.Tensor(dim_model, self.n_heads*dim_key))
+        self.init_params()
         # initialise parameters
+
+    def init_params(self):
+        for param in self.parameters():
+            stdv = 1. / math.sqrt(param.size(-1))
+            param.data.uniform_(-stdv, stdv)
 
     def forward(self, query, exchange, solution_indexes):
         ref = query.clone()
@@ -40,26 +45,35 @@ class Compatability(nn.Module):
         n_query = query.size(1)
         refFlat = ref.contiguous().view(-1, input_dim)
         qflat = query.contiguous().view(-1, input_dim)
-
+        # print(refFlat[0])
+        # print(qflat[0])
         # last dimension can be different for keys and values
         shp = (self.n_heads, batch_size, seq_len, -1)
         shp_q = (self.n_heads, batch_size, n_query, -1)
         Q = torch.matmul(qflat, self.W_query).view(shp_q)
         K = torch.matmul(refFlat, self.W_key).view(shp)
-        compatibility_raw = torch.matmul(Q, K.transpose(2, 3))
-        compatibility = torch.tanh(compatibility_raw[0]) * 10
-        #mask infeasible solutions?
+        # print(Q[0])
+        # print(K[0])
+        compatability_raw = torch.matmul(Q, K.transpose(2, 3)).squeeze(0)
+        # print(compatability_raw.size())
+        # print("compatability_raw")
+        # print(compatability_raw[0])
+        # compatability = torch.tanh(compatability_raw) * 10.0
+        compatability = compatability_raw
+        # print("compatability")
+        # print(compatability[0])
         #max pointless options
-        pointless = torch.eye(seq_len).repeat(batch_size, 1, 1).to(compatibility.device)
-        pointless = pointless * -1e8
-        compatibility = compatibility + pointless
+        pointless = torch.eye(seq_len).repeat(batch_size, 1, 1).to(compatability_raw.device)
+        compatability[pointless.bool()] = -np.inf
+        # print("compatability", compatability[0])
         # mask previous choice exchange
-        # if exchange is not None:
-        #     compatibility[torch.arange(batch_size), exchange[:,0], exchange[:,1]] = -np.inf
-        #     compatibility[torch.arange(batch_size), exchange[:,1], exchange[:,0]] = -np.inf
-        # print(compatibility[0:1])
-        c = compatibility.view(batch_size, -1)
+        if exchange is not None:
+            compatability[torch.arange(batch_size), exchange[:,0], exchange[:,1]] = -np.inf
+            compatability[torch.arange(batch_size), exchange[:,1], exchange[:,0]] = -np.inf
+        # print(compatability[0:1])
+        c = compatability.view(batch_size, -1)
         logits = F.softmax(c, dim=-1)
+        # print(logits[0])
         return logits
 
 class TSP_improve(nn.Module):
@@ -99,11 +113,10 @@ class TSP_improve(nn.Module):
 
 class TSP_improveWrapped:
     def __init__(self, env, trainer, model_config, optimizer_config):
-        # set variables
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.env = env
-        self.actor = TSP_improve(model_config).to(self.device)
         self.trainer = trainer
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.actor = TSP_improve(model_config).to(self.device)
         self.trainer.passIntoParameters(self.actor.parameters(), optimizer_config)
         self.T = int(optimizer_config['T'])
 
@@ -126,15 +139,16 @@ class TSP_improveWrapped:
             probability, exchange = self.actor(problems, state, exchange)
             next_state = self.env.step(state, exchange)
             # calculate reward
-            cost = self.env.evaluate(problems, state).to(self.device)
+            cost = self.env.evaluate(problems, next_state).to(self.device)
             best_for_now = torch.cat((best_so_far[None, :], cost[None, :]), 0).min(0)[0]
-            # reward = best_for_now - best_so_far #
-            reward = best_so_far - best_for_now
+            reward = best_for_now - best_so_far #unflipped reward
+            # reward = best_so_far - best_for_now #
             #save things
             reward_history.append(cost)
             action_history.append(exchange)
             state_history.append(next_state)
             # train
+            # print("Reward: {0}, prob: {1}, action:{2}".format(reward[0], probability[0].item(), exchange[0]))
             R, loss_dict = self.trainer.train(problems, reward, probability)
             total_loss += loss_dict['actor_loss']
             #update for next iteration
@@ -148,8 +162,7 @@ class TSP_improveWrapped:
         problems = self.env.gen(n_batch, p_size).to(self.device) if (path is None) else self.env.load(path, n_batch).to(self.device) # generate or load problems
         # setup inital parameters
         state = self.env.getStartingState(n_batch, p_size).to(self.device)
-        R = self.env.evaluate(problems, state) #[batch_size]
-        best_so_far = self.env.evaluate(problems, state)
+        best_so_far = self.env.evaluate(problems, state) #[batch_size]
         exchange = None
         t = 0
         # pass through model
@@ -160,10 +173,10 @@ class TSP_improveWrapped:
             _, exchange = self.actor(problems, state, exchange)
             state = self.env.step(state, exchange)
             cost = self.env.evaluate(problems, state)
-            R = torch.cat((best_so_far[None, :], cost[None, :]), 0).min(0)[0]
+            best_so_far = torch.cat((best_so_far[None, :], cost[None, :]), 0).min(0)[0]
             #setup for next round
             t += 1
-        return R
+        return best_so_far
 
     def save(self):
         model_dict = {}
