@@ -7,8 +7,9 @@ import torch
 from torch.utils.tensorboard import SummaryWriter
 
 from Misc.Environments import Construction, Improvement
-from Models.ConstructionPointerNetwork import PtrNet, PtrNetWrapped
-from Models.ImprovementTransformer import TSP_improve, TSP_improveWrapped
+from Models.ConstructionPointerNetwork import PtrNetWrapped
+from Models.ImprovementTransformer import TSP_improveWrapped
+from Models.Transformer import TransformerWrapped
 from RLAlgorithm.PolicyBasedTrainer import Reinforce, A2C
 
 class TrainTest:
@@ -39,6 +40,8 @@ class TrainTest:
             self.wrapped_actor = PtrNetWrapped(env, trainer, config['actor'], config['optimiser'])
         elif general_config['model'] == 'TSP_improve':
             self.wrapped_actor = TSP_improveWrapped(env, trainer, config['actor'], config['optimiser'])
+        elif general_config['model'] == 'Transformer':
+            self.wrapped_actor = TransformerWrapped(env, trainer, config['actor'], config['optimiser'])
 
     def train(self, p_size, data_type="tensor", path=None):
         # create files, setup stuff for SAVING DATA
@@ -48,7 +51,7 @@ class TrainTest:
                 writer = csv.writer(file)
                 writer.writerow(["step", "AvgRoutedR", "AvgR", "AvgRouted%"] + self.mode.additonal_params())
         elif data_type is "tensor":
-            tensor_path = '{0}/{1}_tensor'.format(self.folder, self.date)
+            tensor_path = '{0}/{1}_running50epoch_tensor'.format(self.folder, self.date)
             t_board = SummaryWriter(tensor_path)
         # setup test data location if needed
         if path is not None:
@@ -95,7 +98,7 @@ class TrainTest:
                 writer = csv.writer(file)
                 writer.writerow(["step", "AvgRoutedR", "AvgR", "AvgRouted%"])
         elif data_type is "tensor":
-            tensor_path = '{0}/{1}_tensor'.format(self.folder, self.date)
+            tensor_path = '{0}/{1}_running50epoch_tensor'.format(self.folder, self.date)
             t_board = SummaryWriter(tensor_path)
         # run tests
         R = self.wrapped_actor.test(n_batch, p_size, path=path)
@@ -124,20 +127,19 @@ class TrainTest:
     def load(self, epoch):
         file_path = "{0}/backup-epoch{1}".format(self.folder, epoch)
         checkpoint = torch.load(file_path)
-        self.actor_trainer.trainer.load(checkpoint) #load training details
+        self.wrapped_actor.trainer.load(checkpoint) #load training details
         self.n_epoch = epoch
 
 # MODEL
-folder = 'runs/Improvement'
+folder = 'runs/Transformer'
 agent = TrainTest(folder)
-# agent.load(9)
+# agent.load(11)
 
 #TRAINING TESTING DETAILS
-n_epochs = 150
+n_epochs = 50
 test_n_batch = 1000
-prob_size = 3
+prob_size = 5
 print("Number of epochs: {0}".format(n_epochs))
-# file = "datasets/n{0}b1(6).pkg".format(prob_size)
 file = "datasets/n{0}b1({1}).pkg".format(prob_size, 10)
 agent.test(test_n_batch, prob_size, override_step=0)#, path=file)
 for j in range(n_epochs):
@@ -145,8 +147,7 @@ for j in range(n_epochs):
     agent.train(prob_size)#, path=file)
     agent.test(test_n_batch, prob_size)#, path=file)
     print("Finished epoch: {0}".format(j))
-    if j % 50  == 0:
-        agent.save()
+    agent.save()
 agent.save()
 # i += 1
 # for j in range(i, i+n_epochs):

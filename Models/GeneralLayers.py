@@ -54,7 +54,7 @@ class SkipConnection(nn.Module):
         return input + self.module(input)
 
 class MultiHeadAttention(nn.Module):
-    def __init__(self, n_head, dim_model, dim_k, dim_v, dropout=0.1):
+    def __init__(self, n_head, dim_model, dim_k, dim_v):
         super().__init__() #initialise nn.Modules
         self.n_head = n_head
         self.dim_k = dim_k

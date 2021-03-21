@@ -10,8 +10,10 @@ class Environment:
     def __init__(self):
         pass
 
-    def gen(self, list_size, prob_size):
+    def gen(self, list_size, prob_size, routableOnly=True):
         problems = []
+        invalid = 0
+        noSol = 0
         while len(problems) < list_size:
             problem = copt.getProblem(prob_size) #generate problem
             # check the problem is valid
@@ -19,12 +21,13 @@ class Environment:
                 and (np.linalg.norm(np.subtract(x, y)[:2],2) < 30
                 or np.linalg.norm(np.subtract(x, y)[2:],2) < 30) ])
             if (invalidPointNo == 0):
-                if (len(copt.bruteForce(problem)) != 0):
+                if (routableOnly and len(copt.bruteForce(problem, 1)) != 0) or not routableOnly:
                     problems.append(problem)
                 else:
-                    print("Problem with no solution")
+                    noSol += 1
             else:
-                print("Invalid problem")
+                invalid += 1
+        print("Invalid problem: {0}, No solution problem: {1}".format(invalid, noSol))
         random.shuffle(problems) # randomly shuffling the data to prevent any bias, e.g. if testing later with different problem sizes
         return torch.FloatTensor(problems)
 

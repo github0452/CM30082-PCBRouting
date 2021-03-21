@@ -149,7 +149,7 @@ class TSP_improveWrapped:
             state_history.append(next_state)
             # train
             # print("Reward: {0}, prob: {1}, action:{2}".format(reward[0], probability[0].item(), exchange[0]))
-            R, loss_dict = self.trainer.train(problems, reward, probability)
+            R, loss_dict = self.trainer.train(problems, reward, probability, self.actor, self.env)
             total_loss += loss_dict['actor_loss']
             #update for next iteration
             state = next_state
