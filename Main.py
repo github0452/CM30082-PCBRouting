@@ -136,7 +136,7 @@ agent = TrainTest(folder)
 # agent.load(11)
 
 #TRAINING TESTING DETAILS
-n_epochs = 50
+n_epochs = 10
 test_n_batch = 1000
 prob_size = 5
 print("Number of epochs: {0}".format(n_epochs))

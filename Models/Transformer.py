@@ -3,6 +3,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 
+import numpy as np
+import math
+
 from Models.GeneralLayers import GraphEmbedding, SkipConnection, MultiHeadAttention, FeedForward, SelfMultiHeadAttention
 
 class EncoderL(nn.Module):
@@ -41,6 +44,9 @@ class Transformer(nn.Module):
         self.W_last_placeholder = nn.Parameter(torch.Tensor(dim_model))
         self.W_first_placeholder.data.uniform_(-1, 1)  # Placeholder should be in range of activations
         self.W_last_placeholder.data.uniform_(-1, 1)  # Placeholder should be in range of activations
+        self.L1 = nn.Linear(dim_model, dim_model, bias=False)
+        self.L2 = nn.Linear(dim_model, dim_model, bias=False)
+        self.L3 = nn.Linear(dim_model*3, dim_model, bias=False)
 
     # problem points ->
     def forward(self, problems, sampling=True):
@@ -58,17 +64,22 @@ class Transformer(nn.Module):
                 context_query = torch.cat((graph_context, \
                     self.W_first_placeholder.unsqueeze(dim=0).repeat(n_batch, 1), \
                     self.W_last_placeholder.unsqueeze(dim=0).repeat(n_batch, 1)), \
-                    dim=1).unsqueeze(dim=1).repeat(1, seq_len, 1)
+                    dim=1)
             else:
-                context_query = torch.cat((graph_context, self.node_context[:,1,:], self.node_context[:,len(action_list),:]), dim=1)
-            # pass through multi headed attention
-            key, value = node_context, node_context #[n_batch, seq_len, dim_embedding]
-            print(context_query.size())
-            print(key.size())
-            embedded_logits = self.L_decoder_multi_head_attention(context_query, key, value)
+                context_query = torch.cat((graph_context, node_context[:,1,:], node_context[:,len(action_list),:]), dim=1)
+            context_query = context_query.unsqueeze(dim=1).repeat(1, seq_len, 1)
+            key, value = self.L1(node_context), self.L2(node_context)
+            query = self.L3(context_query)
+            #bmm query and key
+            compatability = torch.matmul(query, key.transpose(1, 2)/math.sqrt(query.size(-1)))
+            #softmax result. multiple value and compatability
+            embedded_logits = torch.matmul(torch.softmax(compatability, dim=-1), value)
+            # embedded_logits = self.L_decoder_multi_head_attention(context_query, key, value)
             #another decoder layer - SINGLE ATTENTION HEAD
-            final_key = self.L_node_context(node_context)
-            logits = 10 * tanh(torch.matmul(embedded_logits, key/math.sqrt(query.size(-1))))
+            final_key = self.L_node_context(graph_context).unsqueeze(dim=1)
+            logits = torch.matmul(embedded_logits, final_key.transpose(1, 2)/math.sqrt(query.size(-1)))
+            logits = logits.tanh()*10 #[n_batch, seq_len]
+            logits = logits.squeeze(-1)#
             #mask stuff
             if action_list is not None: # mask the previous actions
                 logits[[[i for i in range(n_batch)], action_list]] = -np.inf
