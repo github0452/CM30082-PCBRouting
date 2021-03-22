@@ -6,83 +6,7 @@ from torch.autograd import Variable
 import numpy as np
 import math
 
-from Models.GeneralLayers import GraphEmbedding, SkipConnection, MultiHeadAttention, FeedForward, SelfMultiHeadAttention
-
-class EncoderL(nn.Module):
-    def __init__(self, n_head, dim_model, dim_hidden, dim_k, dim_v, dropout=0.1):
-        super().__init__() #initialise nn.Modules
-        self.MMA = SkipConnection(SelfMultiHeadAttention(n_head, dim_model, dim_k, dim_v))
-        self.norm_1 = nn.LayerNorm(dim_model, eps=1e-6)
-        self.FF = SkipConnection(FeedForward(dim_model, dim_hidden))
-        self.norm_2 = nn.LayerNorm(dim_model, eps=1e-6)
-
-    # inputs: [batch_size, n_node, embedding_size]
-    # outputs: [batch_size, n_node, embedding_size]
-    def forward(self, inputs):
-        enc_output = self.MMA(inputs) #how is the multihead attention pulled together? mean? addition?
-        enc_output = self.norm_1(enc_output)
-        enc_output = self.FF(enc_output)
-        enc_output = self.norm_2(enc_output)
-        return enc_output
-
-class Attention(nn.Module):
-    """
-    Multi-head attention
-    Input:
-      q: [batch_size, n_node, hidden_dim]
-      k, v: q if None
-    Output:
-      att: [n_node, hidden_dim]
-    """
-    def __init__(self,
-                 q_hidden_dim,
-                 k_dim,
-                 v_dim,
-                 n_head,
-                 k_hidden_dim=None,
-                 v_hidden_dim=None):
-        super().__init__()
-        self.q_hidden_dim = q_hidden_dim
-        self.k_hidden_dim = k_hidden_dim if k_hidden_dim else q_hidden_dim
-        self.v_hidden_dim = v_hidden_dim if v_hidden_dim else q_hidden_dim
-        self.k_dim = k_dim
-        self.v_dim = v_dim
-        self.n_head = n_head
-
-        self.proj_q = nn.Linear(q_hidden_dim, k_dim * n_head, bias=False)
-        self.proj_k = nn.Linear(self.k_hidden_dim, k_dim * n_head, bias=False)
-        self.proj_v = nn.Linear(self.v_hidden_dim, v_dim * n_head, bias=False)
-        self.proj_output = nn.Linear(v_dim * n_head,
-                                     self.v_hidden_dim,
-                                     bias=False)
-
-    def forward(self, q, k=None, v=None, mask=None):
-        if k is None:
-            k = q
-        if v is None:
-            v = k
-        if v is None:
-            v = q
-
-        bsz, n_node, hidden_dim = q.size()
-
-        qs = torch.stack(torch.chunk(self.proj_q(q), self.n_head, dim=-1),
-                         dim=1)  # [batch_size, n_head, n_node, k_dim]
-        ks = torch.stack(torch.chunk(self.proj_k(k), self.n_head, dim=-1),
-                         dim=1)  # [batch_size, n_head, n_node, k_dim]
-        vs = torch.stack(torch.chunk(self.proj_v(v), self.n_head, dim=-1),
-                         dim=1)  # [batch_size, n_head, n_node, v_dim]
-
-        normalizer = self.k_dim**0.5
-        u = torch.matmul(qs, ks.transpose(2, 3)) / normalizer
-        if mask is not None:
-            mask = mask.unsqueeze(1).unsqueeze(1)
-            u = u.masked_fill(mask, float('-inf'))
-        att = torch.matmul(torch.softmax(u, dim=-1), vs)
-        att = att.transpose(1, 2).reshape(bsz, n_node,
-                                          self.v_dim * self.n_head)
-        att = self.proj_output(att)
-        return att
+from Models.GeneralLayers import GraphEmbedding, SkipConnection, MultiHeadAttention, FeedForward, TransformerEncoderL
 
 class Transformer(nn.Module):
     def __init__(self, model_config):
@@ -94,71 +18,36 @@ class Transformer(nn.Module):
         dim_k = int(model_config['dim_k'])
         dim_v = int(model_config['dim_v'])
         self.L_embedder = GraphEmbedding(dim_model, usePosEncoding=False)
-        self.L_encoder = nn.Sequential(*(EncoderL(n_head, dim_model, dim_hidden, dim_k, dim_v) for _ in range(n_layers)))
+        self.L_encoder = nn.Sequential(*(TransformerEncoderL(n_head, dim_model, dim_hidden, dim_k, dim_v) for _ in range(n_layers)))
         self.L_graph_context = nn.Linear(dim_model, dim_model, bias=False)
         self.L_node_context = nn.Linear(dim_model, dim_model, bias=False)
-        self.L_decoder_attention = Attention(dim_model * 3, dim_k, dim_v, n_head, k_hidden_dim=dim_model, v_hidden_dim=dim_model)
-        # self.L_decoder_multi_head_attention = MultiHeadAttention(n_head, dim_model, dim_k, dim_v)
+        self.L_decoder_attention = MultiHeadAttention(dim_model*3, dim_k, dim_v, n_head, dim_k_input=dim_model, dim_v_input=dim_model)
         self.W_v_f = nn.Parameter(torch.FloatTensor(size=[1, 1, dim_model]).uniform_())
         self.W_v_l = nn.Parameter(torch.FloatTensor(size=[1, 1, dim_model]).uniform_())
-        # self.L1 = nn.Linear(dim_model, dim_model, bias=False)
-        # self.L2 = nn.Linear(dim_model, dim_model, bias=False)
-        # self.L3 = nn.Linear(dim_model*3, dim_model, bias=False)
 
-    # problem points ->
     def forward(self, problems, sampling=True):
         n_batch, n_node, _ = problems.size()
         #ENCODE PROBLEM - invariant so must be problem
-        embedded_problems = self.L_embedder(problems, None)
-        node_context = self.L_encoder(embedded_problems) # [n_batch, n_node, dim_model]
-        graph_context = self.L_graph_context(node_context.mean(dim=1, keepdim=True))
-        #sequence information
-        first = self.W_v_f.repeat(n_batch, 1, 1)
-        last = self.W_v_l.repeat(n_batch, 1, 1)
+        embedding = self.L_embedder(problems, None)
+        node_context = self.L_encoder(embedding) # [n_batch, n_node, dim_model]
+        graph_context = self.L_graph_context(node_context.mean(dim=1, keepdim=True)) # [n_batch, 1, dim_model]
+        #setup initial variables
+        first, last = self.W_v_f.repeat(n_batch, 1, 1), self.W_v_l.repeat(n_batch, 1, 1)
         mask = torch.zeros([n_batch, n_node], device=problems.device).bool()
-        # embd_graph & enc_states, [n_batch, n_node, dim_model]
-        action_list = None #action_list: ([step, n_batch])
-        action_probs_list = [] # probability of each action taken, action_probs_list: (step x [n_batch])
-        while (action_list is None or action_list.size(0) != problems.size(1)):
-            #DECODER STUFF
+        action_list, action_probs_list = [], [] #action_list and action_probs_list:  (step x [n_batch])
+        while (len(action_list) < problems.size(1)):
             context_query = torch.cat([graph_context, last, first], dim=-1)
-            # if action_list is None:
-            #     context_query = torch.cat((graph_context, \
-            #         self.W_v_f.repeat(n_batch, 1, 1), \
-            #         self.W_v_l.repeat(n_batch, 1, 1)), \
-            #         dim=1)
-            # else:
-            #     context_query = torch.cat((graph_context, node_context[:,1,:], node_context[:,len(action_list),:]), dim=1)
-            # context_query = context_query.unsqueeze(dim=1).repeat(1, n_node, 1)
             q = self.L_decoder_attention(context_query, node_context, node_context, mask=mask)
-            # key, value = self.L1(node_context), self.L2(node_context)
-            # query = self.L3(context_query)
-            # #bmm query and key
-            # compatability = torch.matmul(query, key.transpose(1, 2)/math.sqrt(query.size(-1)))
-            # #softmax result. multiple value and compatability
-            # embedded_logits = torch.matmul(torch.softmax(compatability, dim=-1), value)
             #another decoder layer - SINGLE ATTENTION HEAD
             k = self.L_node_context(node_context)
-            logits = torch.matmul(q, k.transpose(-2, -1)/math.sqrt(q.size(-1)))
-            logits = logits.squeeze(dim=1)
+            norm_factor = 1/(q.size(-1)**0.5)
+            logits = torch.matmul(q, k.transpose(-2, -1) * norm_factor).squeeze(dim=1)
             logits = logits.tanh()*10 #[n_batch, n_node]
-            logits = logits.masked_fill(mask, float('-inf'))
-            #mask stuff
-            if action_list is not None: # mask the previous actions
-                logits[[[i for i in range(n_batch)], action_list]] = -np.inf
-            # pick an action
-            if sampling:
-                probs = F.softmax(logits, dim=1) #soft max the probabilities
-                actions = probs.multinomial(1).squeeze(1) # sample an index for each problem in the batch, actions: torch.Size([100])
-            else:
-                actions = logits.argmax(dim = 1)
-                probs = Variable(torch.zeros(logits.size()), requires_grad = True).to(logits.device)
-                probs[:, actions] = 1
+            logits = logits.masked_fill(mask, float('-inf')) #mask stuff
+            probs = F.softmax(logits, dim=1) #soft max the probabilities
+            actions = probs.multinomial(1).squeeze(1) if sampling else probs.argmax(dim = 1) # pick an action, actions: torch.Size([100])
             # add it to various lists
-            if action_list is None:
-                action_list = actions.unsqueeze(dim=0)
-            else:
-                action_list = torch.cat((action_list, actions.unsqueeze(dim=0)), dim=0)
+            action_list.append(actions)
             action_probs_list.append(probs[[x for x in range(len(probs))], actions.data])
             # update for next loop
             mask = mask.scatter(1, actions.unsqueeze(dim=-1), True)
@@ -166,7 +55,7 @@ class Transformer(nn.Module):
             last = torch.gather(node_context, 1, visit_idx).transpose(0, 1)
             if len(action_probs_list) == 1:
                 first = last
-        return action_probs_list, action_list
+        return action_probs_list, torch.stack(action_list, dim=0)
 
 class TransformerWrapped:
         # creates the everything around the networks

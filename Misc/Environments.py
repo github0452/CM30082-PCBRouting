@@ -34,7 +34,7 @@ class Environment:
     # problems: torch.Size([100, 5, 4]), orders [5, 100]
     def evaluate(self, problems, orders, additional=None):
         #convert everything to the right format
-        seq_len = problems.size(1)
+        n_node = problems.size(1)
         orders = orders.tolist()
         problems = [[tuple(element) for element in problem] for problem in problems.tolist()]
         reward = []
@@ -45,7 +45,7 @@ class Environment:
                 if (eval["success"] == 0):
                     reward.append(10000)
                 else:
-                    reward.append(eval["measure"]/seq_len)
+                    reward.append(eval["measure"]/n_node)
             else:
                 reward.append(0)
         # print(reward[0:10])

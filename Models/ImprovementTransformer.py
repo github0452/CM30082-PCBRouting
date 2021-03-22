@@ -6,24 +6,7 @@ import torch.nn.functional as F
 import numpy as np
 import math
 
-from Models.GeneralLayers import GraphEmbedding, SkipConnection, MultiHeadAttention, FeedForward, SelfMultiHeadAttention
-
-class EncoderL(nn.Module):
-    def __init__(self, n_head, dim_model, dim_hidden, dim_k, dim_v):
-        super().__init__() #initialise nn.Modules
-        self.MMA = SkipConnection(SelfMultiHeadAttention(n_head, dim_model, dim_k, dim_v))
-        self.norm_1 = nn.LayerNorm(dim_model, eps=1e-6)
-        self.FF = SkipConnection(FeedForward(dim_model, dim_hidden))
-        self.norm_2 = nn.LayerNorm(dim_model, eps=1e-6)
-
-    # inputs: [batch_size, seq_len, embedding_size]
-    # outputs: [batch_size, seq_len, embedding_size]
-    def forward(self, inputs):
-        enc_output = self.MMA(inputs) #how is the multihead attention pulled together? mean? addition?
-        enc_output = self.norm_1(enc_output)
-        enc_output = self.FF(enc_output)
-        enc_output = self.norm_2(enc_output)
-        return enc_output
+from Models.GeneralLayers import GraphEmbedding, SkipConnection, MultiHeadAttention, FeedForward, TransformerEncoderL
 
 class Compatability(nn.Module):
     def __init__(self, dim_model, dim_key):
@@ -41,14 +24,14 @@ class Compatability(nn.Module):
 
     def forward(self, query, exchange, solution_indexes):
         ref = query.clone()
-        batch_size, seq_len, input_dim = ref.size()
+        batch_size, n_node, input_dim = ref.size()
         n_query = query.size(1)
         refFlat = ref.contiguous().view(-1, input_dim)
         qflat = query.contiguous().view(-1, input_dim)
         # print(refFlat[0])
         # print(qflat[0])
         # last dimension can be different for keys and values
-        shp = (self.n_heads, batch_size, seq_len, -1)
+        shp = (self.n_heads, batch_size, n_node, -1)
         shp_q = (self.n_heads, batch_size, n_query, -1)
         Q = torch.matmul(qflat, self.W_query).view(shp_q)
         K = torch.matmul(refFlat, self.W_key).view(shp)
@@ -63,7 +46,7 @@ class Compatability(nn.Module):
         # print("compatability")
         # print(compatability[0])
         #max pointless options
-        pointless = torch.eye(seq_len).repeat(batch_size, 1, 1).to(compatability_raw.device)
+        pointless = torch.eye(n_node).repeat(batch_size, 1, 1).to(compatability_raw.device)
         compatability[pointless.bool()] = -np.inf
         # print("compatability", compatability[0])
         # mask previous choice exchange
@@ -86,14 +69,14 @@ class TSP_improve(nn.Module):
         n_layers = int(model_config['n_layers'])
         n_head = int(model_config['n_head'])
         self.L_embedder = GraphEmbedding(dim_model, usePosEncoding=True)
-        self.L_encoder = nn.Sequential(*(EncoderL(n_head, dim_model, dim_hidden, dim_k, dim_v) for _ in range(n_layers)))
+        self.L_encoder = nn.Sequential(*(TransformerEncoderL(n_head, dim_model, dim_hidden, dim_k, dim_v) for _ in range(n_layers)))
         # self.L_encoder = nn.ModuleList([EncoderL(n_head, dim_model, dim_hidden, dim_k, dim_v) for _ in range(n_layers)])
         self.L_project_graph = nn.Linear(dim_model, dim_model, bias=False)
         self.L_project_node = nn.Linear(dim_model, dim_model, bias=False)
         self.L_decoder = Compatability(dim_model, dim_model)
 
     def forward(self, problems, solution_indexes, exchange, do_sample=True):
-        seq_len = problems.size(1)
+        n_node = problems.size(1)
         x_embed = self.L_embedder(problems, solution_indexes)
         x_encode = self.L_encoder(x_embed) # torch.Size([2, 50, 128])
         # embd graph and node features
@@ -101,13 +84,13 @@ class TSP_improve(nn.Module):
         graph_feature = self.L_project_graph(max_pooling)[:, None, :]
         node_feature = self.L_project_node(x_encode)
         # pass it through decoder
-        fusion = node_feature + graph_feature.expand_as(node_feature) # torch.Size([batch_size, seq_len, 128])
-        logits = self.L_decoder(fusion, exchange, solution_indexes) # # att torch.Size([batch_size, seq_len^2])
+        fusion = node_feature + graph_feature.expand_as(node_feature) # torch.Size([batch_size, n_node, 128])
+        logits = self.L_decoder(fusion, exchange, solution_indexes) # # att torch.Size([batch_size, n_node^2])
         # select or sample
         pair_index = logits.multinomial(1) if do_sample else logits.max(-1)[1].view(-1,1)
         selected_likelihood = logits.gather(1, pair_index)
-        col_selected = pair_index % seq_len
-        row_selected = pair_index // seq_len
+        col_selected = pair_index % n_node
+        row_selected = pair_index // n_node
         pair = torch.cat((row_selected,col_selected),-1)
         return selected_likelihood, pair
 

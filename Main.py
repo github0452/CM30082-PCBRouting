@@ -13,7 +13,7 @@ from Models.Transformer import TransformerWrapped
 from RLAlgorithm.PolicyBasedTrainer import Reinforce, A2C
 
 class TrainTest:
-    def __init__(self, folder):
+    def __init__(self, folder, save_name):
         path = '{0}/configuration.cfg'.format(folder)
         config = configparser.ConfigParser()
         config.read(path)
@@ -25,6 +25,7 @@ class TrainTest:
         self.train_batch_epoch = int(general_config['train_batch_epoch'])
         # generate some parameters
         self.folder = folder
+        self.save_name = save_name
         self.date = datetime.datetime.now().strftime('%m%d_%H_%M')
         self.n_epoch = 0
         #=-=-=-=-=-=-=ENVIRONMENTS=-=-=-=-===-=-=-=-=-=-=
@@ -46,12 +47,12 @@ class TrainTest:
     def train(self, p_size, data_type="tensor", path=None):
         # create files, setup stuff for SAVING DATA
         if data_type is "csv":
-            csv_path = '{0}/{1}_train_data.csv'.format(self.folder, self.date)
+            csv_path = '{0}/{1}_{2}_train_data.csv'.format(self.folder, self.date, self.save_name)
             with open(csv_path, 'w', newline='') as file:
                 writer = csv.writer(file)
                 writer.writerow(["step", "AvgRoutedR", "AvgR", "AvgRouted%"] + self.mode.additonal_params())
         elif data_type is "tensor":
-            tensor_path = '{0}/{1}_running50epoch_tensor'.format(self.folder, self.date)
+            tensor_path = '{0}/{1}_{2}_tensor'.format(self.folder, self.date, self.save_name)
             t_board = SummaryWriter(tensor_path)
         # setup test data location if needed
         if path is not None:
@@ -93,12 +94,12 @@ class TrainTest:
         date = datetime.datetime.now().strftime('%m%d_%H_%M')
         # create files, setup stuff
         if data_type is "csv":
-            csv_path = '{0}/{1}_test_data.csv'.format(self.folder, self.date)
+            csv_path = '{0}/{1}_{2}_test_data.csv'.format(self.folder, self.date, self.save_name)
             with open(csv_path, 'w', newline='') as file:
                 writer = csv.writer(file)
                 writer.writerow(["step", "AvgRoutedR", "AvgR", "AvgRouted%"])
         elif data_type is "tensor":
-            tensor_path = '{0}/{1}_running50epoch_tensor'.format(self.folder, self.date)
+            tensor_path = '{0}/{1}_{2}_tensor'.format(self.folder, self.date, self.save_name)
             t_board = SummaryWriter(tensor_path)
         # run tests
         R = self.wrapped_actor.test(n_batch, p_size, path=path)
@@ -131,14 +132,15 @@ class TrainTest:
         self.n_epoch = epoch
 
 # MODEL
-folder = 'runs/Transformer'
-agent = TrainTest(folder)
+folder = 'runs/Construction'
+save_name = 'seqLen5_RandomRoutable_50epoch'
+agent = TrainTest(folder, save_name)
 # agent.load(11)
 
 #TRAINING TESTING DETAILS
 n_epochs = 50
 test_n_batch = 1000
-prob_size = 5
+prob_size = 3
 print("Number of epochs: {0}".format(n_epochs))
 file = "datasets/n{0}b1({1}).pkg".format(prob_size, 10)
 agent.test(test_n_batch, prob_size, override_step=0)#, path=file)
@@ -147,7 +149,8 @@ for j in range(n_epochs):
     agent.train(prob_size)#, path=file)
     agent.test(test_n_batch, prob_size)#, path=file)
     print("Finished epoch: {0}".format(j))
-    agent.save()
+    if j % 5 == 4:
+        agent.save()
 agent.save()
 # i += 1
 # for j in range(i, i+n_epochs):
