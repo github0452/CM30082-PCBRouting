@@ -56,6 +56,8 @@ class Reinforce:
             self.baseline = ExpMovingAvg()
         elif baseline_config['baselineType'] == 'Rollout':
             self.baseline = Rollout(int(baseline_config['rolloutCount']))
+        elif baseline_config['baselineType'] == 'None':
+            pass
         else:
             print("Invalid baseline type")
 
@@ -73,16 +75,19 @@ class Reinforce:
             baseline = self.baseline.update(reward)
         elif self.baseline_type == 'Rollout':
             baseline = self.baseline.update(problems, model, env)
-        advantage = reward - baseline.detach()
-        logprobs = torch.log(probs)
-        reinforce = (advantage * logprobs)
-        actor_loss = reinforce.mean()
-        # update the weights using optimiser
-        self.actor_optimizer.zero_grad()
-        actor_loss.backward() # calculate gradient backpropagation
-        torch.nn.utils.clip_grad_norm_(self.actor_param, self.max_g, norm_type=2) # to prevent gradient expansion, set max
-        self.actor_optimizer.step() # update weights
-        self.actor_scheduler.step()
+        elif self.baseline_type == 'None':
+            baseline = torch.zeros((problems.size(0))).to(problems.device)
+        with torch.autograd.set_detect_anomaly(True):
+            advantage = reward - baseline.detach()
+            logprobs = torch.log(probs)
+            reinforce = (advantage * logprobs)
+            actor_loss = reinforce.mean()
+            # update the weights using optimiser
+            self.actor_optimizer.zero_grad()
+            actor_loss.backward() # calculate gradient backpropagation
+            torch.nn.utils.clip_grad_norm_(self.actor_param, self.max_g, norm_type=2) # to prevent gradient expansion, set max
+            self.actor_optimizer.step() # update weights
+            self.actor_scheduler.step()
         return reward, {'actor_loss': actor_loss}
 
     def additonal_params(self):
