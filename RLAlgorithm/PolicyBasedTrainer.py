@@ -10,6 +10,26 @@ import math
 import random
 import numpy as np
 
+class Rollout:
+    def __init__(self, rollout_count):
+        self.rollout_count = rollout_count
+
+    def update(self, problems, model, env):
+        # run through model
+        model.eval()
+        _, action_list = model(problems, sampling=True)
+        rollouts = []
+        for i in range(self.rollout_count):
+            R = env.evaluate(problems, action_list.transpose(0, 1)).to(problems.device)
+            rollouts.append(R)
+        return torch.mean(torch.stack(rollouts, dim=0), dim=0)
+
+    def save(self):
+        return {}
+
+    def load(self, checkpoint):
+        pass
+
 class ExpMovingAvg:
     def __init__(self):
         self.TRACK_critic_exp_mvg_avg = None
@@ -31,8 +51,13 @@ class ExpMovingAvg:
 
 class Reinforce:
     def __init__(self, baseline_config):
+        self.baseline_type = baseline_config['baselineType']
         if baseline_config['baselineType'] == 'ExpMovingAvg':
             self.baseline = ExpMovingAvg()
+        elif baseline_config['baselineType'] == 'Rollout':
+            self.baseline = Rollout(int(baseline_config['rolloutCount']))
+        else:
+            print("Invalid baseline type")
 
     def passIntoParameters(self, parameters, optimizer_config):
         self.actor_param = parameters
@@ -40,11 +65,15 @@ class Reinforce:
         self.actor_scheduler = torch.optim.lr_scheduler.StepLR(self.actor_optimizer, step_size=1, gamma=float(optimizer_config['actor_lr_gamma']))
         self.max_g = float(optimizer_config['maxGrad'])
 
-    def train(self, problems, reward, probs):
+    def train(self, problems, reward, probs, model=None, env=None):
         # reward is what the model is training to minimize
         # probs is the probability that it took whatever set of actions led to this reward
         # problems is so that the critic can analyse it
-        advantage = reward - self.baseline.update(reward).detach()
+        if self.baseline_type == 'ExpMovingAvg':
+            baseline = self.baseline.update(reward)
+        elif self.baseline_type == 'Rollout':
+            baseline = self.baseline.update(problems, model, env)
+        advantage = reward - baseline.detach()
         logprobs = torch.log(probs)
         reinforce = (advantage * logprobs)
         actor_loss = reinforce.mean()

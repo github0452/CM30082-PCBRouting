@@ -9,10 +9,11 @@ from torch.utils.tensorboard import SummaryWriter
 from Misc.Environments import Construction, Improvement
 from Models.ConstructionPointerNetwork import PtrNetWrapped
 from Models.ImprovementTransformer import TSP_improveWrapped
+from Models.Transformer import TransformerWrapped
 from RLAlgorithm.PolicyBasedTrainer import Reinforce, A2C
 
 class TrainTest:
-    def __init__(self, folder):
+    def __init__(self, folder, save_name):
         path = '{0}/configuration.cfg'.format(folder)
         config = configparser.ConfigParser()
         config.read(path)
@@ -24,6 +25,7 @@ class TrainTest:
         self.train_batch_epoch = int(general_config['train_batch_epoch'])
         # generate some parameters
         self.folder = folder
+        self.save_name = save_name
         self.date = datetime.datetime.now().strftime('%m%d_%H_%M')
         self.n_epoch = 0
         #=-=-=-=-=-=-=ENVIRONMENTS=-=-=-=-===-=-=-=-=-=-=
@@ -39,29 +41,31 @@ class TrainTest:
             self.wrapped_actor = PtrNetWrapped(env, trainer, config['actor'], config['optimiser'])
         elif general_config['model'] == 'TSP_improve':
             self.wrapped_actor = TSP_improveWrapped(env, trainer, config['actor'], config['optimiser'])
+        elif general_config['model'] == 'Transformer':
+            self.wrapped_actor = TransformerWrapped(env, trainer, config['actor'], config['optimiser'])
 
-    def train(self, p_size, data_type="tensor", data_loc=None):
+    def train(self, p_size, data_type="tensor", path=None):
         # create files, setup stuff for SAVING DATA
         if data_type is "csv":
-            csv_path = '{0}/{1}_train_data.csv'.format(self.folder, self.date)
+            csv_path = '{0}/{1}_{2}_train_data.csv'.format(self.folder, self.date, self.save_name)
             with open(csv_path, 'w', newline='') as file:
                 writer = csv.writer(file)
                 writer.writerow(["step", "AvgRoutedR", "AvgR", "AvgRouted%"] + self.mode.additonal_params())
         elif data_type is "tensor":
-            tensor_path = '{0}/{1}_tensor'.format(self.folder, self.date)
+            tensor_path = '{0}/{1}_{2}_tensor'.format(self.folder, self.date, self.save_name)
             t_board = SummaryWriter(tensor_path)
         # setup test data location if needed
-        if data_loc is not None:
-            if isinstance(data_loc, str):
-                data_loc = [data_loc for _ in range(self.train_batch_epoch)]
-            elif not isinstance(data_loc, list) or len(data_loc) < self.train_batch_epoch:
+        if path is not None:
+            if isinstance(path, str):
+                path = [path for _ in range(self.train_batch_epoch)]
+            elif not isinstance(path, list) or len(path) < self.train_batch_epoch:
                 raise NotImplementedError
         else:
-            data_loc = [None for _ in range(self.train_batch_epoch)]
+            path = [None for _ in range(self.train_batch_epoch)]
         # loop through batches
-        for i, path in zip(range((self.n_epoch*self.train_batch_epoch), (self.n_epoch*self.train_batch_epoch)+self.train_batch_epoch), data_loc):
+        for i, path in zip(range((self.n_epoch*self.train_batch_epoch), (self.n_epoch*self.train_batch_epoch)+self.train_batch_epoch), path):
             #pass it through reinforcement learning algorithm to train
-            R, loss = self.wrapped_actor.train(self.train_batch_size, p_size)
+            R, loss = self.wrapped_actor.train(self.train_batch_size, p_size, path=path)
             R_routed = [x for x in R if (x != 10000)]
             avgR = R.mean().item()
             if len(R_routed) != 0:
@@ -90,15 +94,15 @@ class TrainTest:
         date = datetime.datetime.now().strftime('%m%d_%H_%M')
         # create files, setup stuff
         if data_type is "csv":
-            csv_path = '{0}/{1}_test_data.csv'.format(self.folder, self.date)
+            csv_path = '{0}/{1}_{2}_test_data.csv'.format(self.folder, self.date, self.save_name)
             with open(csv_path, 'w', newline='') as file:
                 writer = csv.writer(file)
                 writer.writerow(["step", "AvgRoutedR", "AvgR", "AvgRouted%"])
         elif data_type is "tensor":
-            tensor_path = '{0}/{1}_tensor'.format(self.folder, self.date)
+            tensor_path = '{0}/{1}_{2}_tensor'.format(self.folder, self.date, self.save_name)
             t_board = SummaryWriter(tensor_path)
         # run tests
-        R = self.wrapped_actor.test(n_batch, p_size, path)
+        R = self.wrapped_actor.test(n_batch, p_size, path=path)
         R_routed = [x for x in R if (x != 10000)]
         avgR = R.mean().item()
         if len(R_routed) != 0:
@@ -124,28 +128,30 @@ class TrainTest:
     def load(self, epoch):
         file_path = "{0}/backup-epoch{1}".format(self.folder, epoch)
         checkpoint = torch.load(file_path)
-        self.actor_trainer.trainer.load(checkpoint) #load training details
+        self.wrapped_actor.trainer.load(checkpoint) #load training details
         self.n_epoch = epoch
 
 # MODEL
-folder = 'runs/Improvement'
-agent = TrainTest(folder)
-# agent.load(9)
+folder = 'runs/Construction'
+save_name = 'seqLen5_RandomRoutable_50epoch'
+agent = TrainTest(folder, save_name)
+# agent.load(11)
 
 #TRAINING TESTING DETAILS
-n_epochs = 10
+n_epochs = 50
 test_n_batch = 1000
 prob_size = 5
 print("Number of epochs: {0}".format(n_epochs))
-
-agent.test(test_n_batch, prob_size, override_step=0)
+file = "datasets/n{0}b1({1}).pkg".format(prob_size, 10)
+agent.test(test_n_batch, prob_size, override_step=0)#, path=file)
 for j in range(n_epochs):
     #loop through batches of the test problems
-    agent.train(prob_size)#, data_loc="datasets/n5b10(1).pkg")
-    agent.test(test_n_batch, prob_size)#, data_loc="datasets/n5b1(1).pkg")
-    #, data_loc="datasets/n5b10(1).pkg")
-    agent.save()
+    agent.train(prob_size)#, path=file)
+    agent.test(test_n_batch, prob_size)#, path=file)
     print("Finished epoch: {0}".format(j))
+    if j % 5 == 4:
+        agent.save()
+agent.save()
 # i += 1
 # for j in range(i, i+n_epochs):
 #     train.train_epoch(n_batch_in_epoch, train_batch_size, test_n_batch, 7, j)

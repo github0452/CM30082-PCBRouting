@@ -36,8 +36,8 @@ class GraphEmbedding(nn.Module):
         pos_enc = torch.gather(position_enc, 1, index).clone()
         return pos_enc
 
-    # inputs: inputs [n_batch, seq_len, 4]
-    # outputs: embeddedGraph [n_batch, seq_len, dim_embedding]
+    # inputs: inputs [n_batch, n_node, 4]
+    # outputs: embeddedGraph [n_batch, n_node, dim_embedding]
     def forward(self, inputs, positions=None):
         posEncoding = 0
         if self.usePosEncoding:
@@ -54,65 +54,90 @@ class SkipConnection(nn.Module):
         return input + self.module(input)
 
 class MultiHeadAttention(nn.Module):
-    def __init__(self, n_head, dim_model, dim_k, dim_v, dropout=0.1):
+    def __init__(self, dim_q_input, dim_k, dim_v, n_head, dim_k_input=None, dim_v_input=None):
         super().__init__() #initialise nn.Modules
-        self.n_head = n_head
+        self.dim_q_input = dim_q_input
+        self.dim_k_input = dim_k_input if dim_k_input else dim_q_input
+        self.dim_v_input = dim_v_input if dim_v_input else dim_q_input
         self.dim_k = dim_k
         self.dim_v = dim_v
+        self.n_head = n_head
         #layers
-        self.w_qs = nn.Linear(dim_model, n_head*dim_k, bias=False)
-        self.w_ks = nn.Linear(dim_model, n_head*dim_k, bias=False)
-        self.w_vs = nn.Linear(dim_model, n_head*dim_v, bias=False)
-        self.fc = nn.Linear(n_head*dim_v, dim_model, bias=False)
-        self.layer_norm = nn.LayerNorm(dim_model, eps=1e-6)
+        self.L_proj_q = nn.Linear(self.dim_q_input, n_head*dim_k, bias=False)
+        self.L_proj_k = nn.Linear(self.dim_k_input, n_head*dim_k, bias=False)
+        self.L_proj_v = nn.Linear(self.dim_v_input, n_head*dim_v, bias=False)
+        self.fc = nn.Linear(n_head*dim_v, self.dim_v_input, bias=False)
 
-    # inputs: [n_batch, seq_len, dim_embedding]
-    def forward(self, q, k, v):
+    # inputs: [n_batch, n_node, dim_embedding]
+    def forward(self, q, k=None, v=None, mask=None):
+        k = q if k is None else k
+        v = k if v is None else v
         n_batch, len_q, _ = q.size()
-        len_k, len_v = k.size(1), v.size(1)
-        residual = q
-        q = self.layer_norm(q)
-        # pass through linear layers
-        q = self.w_qs(q) #[n_batch, seq_len, dim_embedding] => [n_batch, seq_len, n_head*dim_k]
-        k = self.w_ks(k)
-        v = self.w_vs(v)
-        # Separate different heads: n_batch x seq_len x n_head x dim_k
-        q = q.view(n_batch, len_q, self.n_head, self.dim_k)
-        k = k.view(n_batch, len_k, self.n_head, self.dim_k)
-        v = v.view(n_batch, len_v, self.n_head, self.dim_v)
-        q, k, v = q.transpose(1, 2), k.transpose(1, 2), v.transpose(1, 2)
-        # q and k are multiplied
+        # pass through linear layers and seperate different heads: n_batch x len_x x n_head x dim_x
+        qs = torch.stack(torch.chunk(self.L_proj_q(q), self.n_head, dim=-1), dim=1)  # [batch_size, n_head, n_node, k_dim]
+        ks = torch.stack(torch.chunk(self.L_proj_k(k), self.n_head, dim=-1), dim=1)  # [batch_size, n_head, n_node, k_dim]
+        vs = torch.stack(torch.chunk(self.L_proj_v(v), self.n_head, dim=-1), dim=1)  # [batch_size, n_head, n_node, v_dim]
+        # calculate compatability/attention
         norm_factor = 1/(self.dim_k**0.5)
-        attn = norm_factor * torch.matmul(q, k.transpose(2, 3))
-        # softmax and dropout applied
-        attn = F.softmax(attn, dim=-1)
-        # attn and v multiplied
-        q = torch.matmul(attn, v)
-        # dropout applied
+        attn = norm_factor * torch.matmul(qs, ks.transpose(2, 3))
+        if mask is not None:
+            mask = mask.unsqueeze(1).unsqueeze(1)
+            attn = attn.masked_fill(mask, float('-inf'))
+        # calculate final multi-head query
+        q = torch.matmul(F.softmax(attn, dim=-1), vs)
         # Combine the last two dimensions to concatenate all the heads together: b x lq x (n*dv)
         q = q.transpose(1, 2).contiguous().view(n_batch, len_q, -1)
         q = self.fc(q)
-        q += residual
-        q = self.layer_norm(q)
         return q
 
-class SelfMultiHeadAttention(MultiHeadAttention):
-    def forward(self, input):
-        return MultiHeadAttention.forward(self, input, input, input)
-
-class FeedForward(nn.Module):
+class FeedForward(nn.Sequential):
     def __init__(self, dim_model, dim_hidden, dropout=0.1):
-        super().__init__() #initialise nn.Modules
-        self.L_ff = nn.Sequential(
-                    nn.Linear(dim_model, dim_hidden),
-			        nn.ReLU(inplace = False),
-                    nn.Linear(dim_hidden, dim_model))
-        self.L_norm = nn.LayerNorm(dim_model, eps=1e-6)
+        super().__init__(
+            nn.Linear(dim_model, dim_hidden),
+	        nn.ReLU(inplace = False),
+            nn.Linear(dim_hidden, dim_model)
+        ) #initialise nn.Modules
+        # inputs: [n_batch, n_node, dim_model]
+        # outputs: [n_batch, n_node, dim_model]
 
-    # inputs: [n_batch, seq_len, dim_embedding]
+class TransformerEncoderL(nn.Sequential):
+    def __init__(self, n_head, dim_model, dim_hidden, dim_k, dim_v, dropout=0.1):
+        super().__init__() #initialise nn.Modules
+        self.MMA = SkipConnection(MultiHeadAttention(dim_model, dim_k, dim_v, n_head))
+        self.norm_1 = Normalization(dim_model)
+        self.FF = SkipConnection(FeedForward(dim_model, dim_hidden))
+        self.norm_2 = Normalization(dim_model)
+
+    # inputs: [batch_size, n_node, embedding_size]
+    # outputs: [batch_size, n_node, embedding_size]
     def forward(self, inputs):
-        residual = inputs
-        x = self.L_ff(inputs) # [n_batch, seq_len, dim_model]
-        x += residual
-        x = self.L_norm(x)
-        return x
+        enc_output = self.MMA(inputs) #how is the multihead attention pulled together? mean? addition?
+        enc_output = self.norm_1(enc_output)
+        enc_output = self.FF(enc_output)
+        enc_output = self.norm_2(enc_output)
+        return enc_output
+
+class Normalization(nn.Module):
+    def __init__(self, embed_dim, normalization='batch'):
+        super(Normalization, self).__init__()
+        normalizer_class = {
+            'batch': nn.BatchNorm1d,
+            'instance': nn.InstanceNorm1d
+        }.get(normalization, None)
+        self.normalizer = normalizer_class(embed_dim, affine=True)
+        # Normalization by default initializes affine parameters with bias 0 and weight unif(0,1) which is too large!
+        # self.init_parameters()
+
+    def init_parameters(self):
+        for name, param in self.named_parameters():
+            stdv = 1. / math.sqrt(param.size(-1))
+            param.data.uniform_(-stdv, stdv)
+
+    def forward(self, input):
+        if isinstance(self.normalizer, nn.BatchNorm1d):
+            return self.normalizer(input.view(-1, input.size(-1))).view(*input.size())
+        elif isinstance(self.normalizer, nn.InstanceNorm1d):
+            return self.normalizer(input.permute(0, 2, 1)).permute(0, 2, 1)
+        else:
+            assert self.normalizer is None, "Unknown normalizer type"
+            return input

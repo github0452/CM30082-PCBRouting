@@ -102,10 +102,10 @@ def metrics(problems, TENSORBOARD_write, solutionFunction, *parameters):
         {'avgRouted': percRouted, 'avgRReward': routedSolutionQual, 'avgRRewardPerElement': routedSolutionQualPerElement, 'time': timeTaken})
     return percRouted, routedSolutionQual, routedSolutionQualPerElement, timeTaken
 
-def runMetrics(batch_size, seq_len, TENSORBOARD_write):
+def runMetrics(batch_size, n_node, TENSORBOARD_write):
     baseline = Baselines()
-    problems = Environments.genProblemList(batch_size, seq_len)
-    print("=-=-=-=-=-=Batch size: ", batch_size, ",seq len: ", seq_len, "=-=-=-=-=-=")
+    problems = Environments.genProblemList(batch_size, n_node)
+    print("=-=-=-=-=-=Batch size: ", batch_size, ",seq len: ", n_node, "=-=-=-=-=-=")
     print("Brute force", metrics(problems, TENSORBOARD_write, baseline.bruteForce))
     print("Random sampling", metrics(problems, TENSORBOARD_write, baseline.randomSampling))
     print("Nearest neighbour", metrics(problems, TENSORBOARD_write, baseline.NN))
