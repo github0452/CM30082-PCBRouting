@@ -140,7 +140,7 @@ agent = TrainTest(folder, save_name)
 #TRAINING TESTING DETAILS
 n_epochs = 50
 test_n_batch = 1000
-prob_size = 3
+prob_size = 5
 print("Number of epochs: {0}".format(n_epochs))
 file = "datasets/n{0}b1({1}).pkg".format(prob_size, 10)
 agent.test(test_n_batch, prob_size, override_step=0)#, path=file)

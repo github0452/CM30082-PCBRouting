@@ -104,9 +104,9 @@ class TransformerEncoderL(nn.Sequential):
     def __init__(self, n_head, dim_model, dim_hidden, dim_k, dim_v, dropout=0.1):
         super().__init__() #initialise nn.Modules
         self.MMA = SkipConnection(MultiHeadAttention(dim_model, dim_k, dim_v, n_head))
-        self.norm_1 = nn.LayerNorm(dim_model, eps=1e-6)
+        self.norm_1 = Normalization(dim_model)
         self.FF = SkipConnection(FeedForward(dim_model, dim_hidden))
-        self.norm_2 = nn.LayerNorm(dim_model, eps=1e-6)
+        self.norm_2 = Normalization(dim_model)
 
     # inputs: [batch_size, n_node, embedding_size]
     # outputs: [batch_size, n_node, embedding_size]
@@ -116,3 +116,28 @@ class TransformerEncoderL(nn.Sequential):
         enc_output = self.FF(enc_output)
         enc_output = self.norm_2(enc_output)
         return enc_output
+
+class Normalization(nn.Module):
+    def __init__(self, embed_dim, normalization='batch'):
+        super(Normalization, self).__init__()
+        normalizer_class = {
+            'batch': nn.BatchNorm1d,
+            'instance': nn.InstanceNorm1d
+        }.get(normalization, None)
+        self.normalizer = normalizer_class(embed_dim, affine=True)
+        # Normalization by default initializes affine parameters with bias 0 and weight unif(0,1) which is too large!
+        # self.init_parameters()
+
+    def init_parameters(self):
+        for name, param in self.named_parameters():
+            stdv = 1. / math.sqrt(param.size(-1))
+            param.data.uniform_(-stdv, stdv)
+
+    def forward(self, input):
+        if isinstance(self.normalizer, nn.BatchNorm1d):
+            return self.normalizer(input.view(-1, input.size(-1))).view(*input.size())
+        elif isinstance(self.normalizer, nn.InstanceNorm1d):
+            return self.normalizer(input.permute(0, 2, 1)).permute(0, 2, 1)
+        else:
+            assert self.normalizer is None, "Unknown normalizer type"
+            return input
