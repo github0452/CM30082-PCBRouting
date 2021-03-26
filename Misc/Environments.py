@@ -62,6 +62,9 @@ class Environment:
         return problems
 
 class Construction(Environment):
+    def initialState(self, problems):
+        pass
+    
     def step(self, cur_state, step):
         if cur_state is not None:
             next_state = torch.cat((cur_state, step.unsqueeze(dim=1)), dim=1)
@@ -71,9 +74,6 @@ class Construction(Environment):
 
     def isDone(self, cur_state, problems):
         return (cur_state.size(1) == problems.size(1))
-
-    def getType(self):
-        return 'Construction'
 
 class Improvement(Environment):
     def __init__(self):
@@ -104,9 +104,6 @@ class Improvement(Environment):
 
     def isDone(self):
         pass
-
-    def getType(self):
-        return 'Improvement'
 
 if __name__ == "__main__":
     batchSize = 1
