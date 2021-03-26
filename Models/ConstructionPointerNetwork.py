@@ -86,7 +86,7 @@ class PtrNet(nn.Module):
             actions = probs.multinomial(1).squeeze(1) if sampling else probs.argmax(dim = 1) # pick an action, actions: torch.Size([100])
             # add it to various lists
             action_list.append(actions)
-            action_probs_list.append(probs[[x for x in range(len(probs))], actions.data])
+            action_probs_list.append(probs.gather(0, actions.unsqueeze(dim=1)))
             # update for next loop
             mask = mask.scatter(1, actions.unsqueeze(dim=-1), True)
             dec_input = embd_graph[[i for i in range(n_batch)], action_list[-1].data, :] # takes the corresponding embeddedGraph[actions]
