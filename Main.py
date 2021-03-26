@@ -132,8 +132,9 @@ class TrainTest:
         self.n_epoch = epoch
 
 # MODEL
-folder = 'runs/Construction'
-save_name = 'seqLen5_RandomRoutable_50epoch'
+folder = 'runs/Improvement'
+# folder = 'runs/Transformer' 
+save_name = 'seqLen5_RandomRoutable_50epoch_baseReward'
 agent = TrainTest(folder, save_name)
 # agent.load(11)
 
@@ -142,11 +143,11 @@ n_epochs = 50
 test_n_batch = 1000
 prob_size = 5
 print("Number of epochs: {0}".format(n_epochs))
-file = "datasets/n{0}b1({1}).pkg".format(prob_size, 10)
+file = "datasets/n{0}b10({1}).pkg".format(prob_size, 1)
 agent.test(test_n_batch, prob_size, override_step=0)#, path=file)
 for j in range(n_epochs):
     #loop through batches of the test problems
-    agent.train(prob_size)#, path=file)
+    agent.train(prob_size, path=file)
     agent.test(test_n_batch, prob_size)#, path=file)
     print("Finished epoch: {0}".format(j))
     if j % 5 == 4:
