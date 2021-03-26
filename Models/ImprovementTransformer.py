@@ -14,8 +14,8 @@ class Compatability(nn.Module):
         self.n_heads = 1
         self.W_query = nn.Parameter(torch.Tensor(dim_model, self.n_heads*dim_key))
         self.W_key = nn.Parameter(torch.Tensor(dim_model, self.n_heads*dim_key))
-        self.init_params()
-        # initialise parameters
+        self.init_params() # initialise parameters
+
 
     def init_params(self):
         for param in self.parameters():
@@ -26,8 +26,8 @@ class Compatability(nn.Module):
         ref = query.clone()
         batch_size, n_node, input_dim = ref.size()
         n_query = query.size(1)
-        refFlat = ref.contiguous().view(-1, input_dim)
         qflat = query.contiguous().view(-1, input_dim)
+        refFlat = ref.contiguous().view(-1, input_dim)
         # last dimension can be different for keys and values
         shp = (self.n_heads, batch_size, n_node, -1)
         shp_q = (self.n_heads, batch_size, n_query, -1)
@@ -36,10 +36,9 @@ class Compatability(nn.Module):
         compatability_raw = torch.matmul(Q, K.transpose(2, 3)).squeeze(0)
         # compatability = torch.tanh(compatability_raw) * 10.0
         compatability = compatability_raw
-        #max pointless options
+        # mask pointless options and previous exchange
         pointless = torch.eye(n_node).repeat(batch_size, 1, 1).to(compatability_raw.device)
         compatability[pointless.bool()] = -np.inf
-        # mask previous choice exchange
         if prev_exchange is not None:
             compatability[torch.arange(batch_size), prev_exchange[:,0], prev_exchange[:,1]] = -np.inf
             compatability[torch.arange(batch_size), prev_exchange[:,1], prev_exchange[:,0]] = -np.inf
@@ -100,32 +99,41 @@ class TSP_improveWrapped:
         exchange = None
         # tracking stuff for information
         action_history = [] #INFO
-        state_history = [state]
+        state_history = []
         reward_history = [] #INFO
-        total_loss = 0
+        prob_history = []
         # run through the model
         t = 0
         self.actor.train()
         while t < self.T:
-            probability, exchange = self.actor(problems, state, exchange)
+            with torch.autograd.set_detect_anomaly(True):
+                probability, exchange = self.actor(problems, state, exchange)
             next_state = self.env.step(state, exchange)
             # calculate reward
             cost = self.env.evaluate(problems, next_state).to(self.device)
             best_for_now = torch.cat((best_so_far[None, :], cost[None, :]), 0).min(0)[0]
-            # reward = best_for_now - best_so_far #unflipped reward
-            reward = cost - initial_result
             #save things
-            reward_history.append(reward)
+            reward_history.append(best_for_now - best_so_far)
             action_history.append(exchange)
             state_history.append(next_state)
-            # train
-            R, loss_dict = self.trainer.train(problems, reward, probability, self.actor, self.env)
-            total_loss += loss_dict['actor_loss']
+            prob_history.append(probability)
             #update for next iteration
             state = next_state
             best_so_far = best_for_now
             t += 1
-        return best_so_far, {'actor_loss': total_loss}
+        # train
+        # Get discounted R
+        Reward = []
+        reward_reversed = reward_history[::-1]
+        next_return = 0
+        for r in reward_reversed:
+            R = next_return * 0.9 + r
+            Reward.append(R)
+            next_return = R
+        likelihood = torch.stack(prob_history, 0)
+        Reward = torch.stack(Reward[::-1], 0)
+        R, loss_dict = self.trainer.train(problems, Reward, likelihood.squeeze(-1), self.actor, self.env)
+        return best_so_far, loss_dict
 
     # given a batch size and problem size will test the model
     def test(self, n_batch, p_size, path=None):

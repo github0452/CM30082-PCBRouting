@@ -67,20 +67,24 @@ class Reinforce:
         self.actor_scheduler = torch.optim.lr_scheduler.StepLR(self.actor_optimizer, step_size=1, gamma=float(optimizer_config['actor_lr_gamma']))
         self.max_g = float(optimizer_config['maxGrad'])
 
-    def train(self, problems, reward, probs, model=None, env=None):
+    # reward, probability: [steps, n_batch]
+    # problems: [steps, n_batch, n_nodes, 4]
+    def train(self, problems, reward, probability, model=None, env=None):
         # reward is what the model is training to minimize
-        # probs is the probability that it took whatever set of actions led to this reward
+        # probability is the probability that it took whatever set of actions led to this reward
         # problems is so that the critic can analyse it
+        steps, n_batch = reward.size()
+        assert (probability.size() == reward.size()), "Reward size {0} does not match probability size {1}".format(reward.size(), probability.size())
         if self.baseline_type == 'ExpMovingAvg':
-            baseline = self.baseline.update(reward)
-        elif self.baseline_type == 'Rollout':
-            baseline = self.baseline.update(problems, model, env)
+            baseline = self.baseline.update(reward.mean(dim=0))
+        elif self.baseline_type == 'Rollout': #TODO
+            baseline = self.baseline.update(problems.view(steps*n_batch), model, env).view(steps, n_batch)
         elif self.baseline_type == 'None':
-            baseline = torch.zeros((problems.size(0))).to(problems.device)
+            baseline = torch.zeros_like(reward)
         with torch.autograd.set_detect_anomaly(True):
             advantage = reward - baseline.detach()
-            logprobs = torch.log(probs)
-            reinforce = (advantage * logprobs)
+            logprobability = torch.log(probability)
+            reinforce = (advantage * logprobability)
             actor_loss = reinforce.mean()
             # update the weights using optimiser
             self.actor_optimizer.zero_grad()
@@ -97,13 +101,15 @@ class Reinforce:
         model_dict = {}
         model_dict['actor_optimizer_state_dict'] = self.actor_optimizer.state_dict()
         model_dict['actor_schedular_state_dict'] = self.actor_scheduler.state_dict()
-        model_dict.update(self.baseline.save())
+        if not self.baseline_type == 'None':
+            model_dict.update(self.baseline.save())
         return model_dict
 
     def load(self, checkpoint):
         self.actor_optimizer.load_state_dict(checkpoint['actor_optimizer_state_dict'])
         self.actor_scheduler.load_state_dict(checkpoint['actor_schedular_state_dict'])
-        self.baseline.load(checkpoint)
+        if not self.baseline_type == 'None':
+            self.baseline.load(checkpoint)
 
 class A2C:
     def __init__(self, critic_config):
@@ -122,7 +128,7 @@ class A2C:
     def additonal_params(self):
         return ['actor_loss', 'critic_loss']
 
-    def train(self, problems, reward, probs):
+    def train(self, problems, reward, probability):
         critic_reward = self.critic(problems.detach())
         # train critic
         critic_loss = self.critic_mse_loss(reward, critic_reward)
@@ -133,8 +139,8 @@ class A2C:
         self.critic_scheduler.step() #DO IN THE LATER LAYER?
         # train actor
         advantage = reward - critic_reward.detach()
-        logprobs = torch.log(probs)
-        reinforce = (advantage * logprobs)
+        logprobability = torch.log(probability)
+        reinforce = (advantage * logprobability)
         actor_loss = reinforce.mean()
         # update the weights using optimiser
         self.actor_optimizer.zero_grad()

@@ -145,7 +145,7 @@ class PtrNetWrapped: #wrapper for model
         for i in range(1, len(action_probs_list)):
             probs = probs * action_probs_list[i]
         # use this to train
-        R, loss = self.trainer.train(problems, reward, probs, self.actor, self.env)
+        R, loss = self.trainer.train(problems, reward.unsqueeze(dim=0), probs.unsqueeze(dim=0), self.actor, self.env)
         return R, loss
 
     # given a batch size and problem size will test the model
