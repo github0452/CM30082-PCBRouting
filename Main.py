@@ -10,7 +10,7 @@ from Misc.Environments import Construction, Improvement
 from Models.ConstructionPointerNetwork import PtrNetWrapped
 from Models.ImprovementTransformer import TSP_improveWrapped
 from Models.ConstructionTransformer import TransformerWrapped
-from RLAlgorithm.PolicyBasedTrainer import Reinforce, A2C
+from RLAlgorithm.PolicyBasedTrainer import Reinforce
 
 class TrainTest:
     def __init__(self, folder, save_name):
@@ -28,23 +28,24 @@ class TrainTest:
         self.save_name = save_name
         self.date = datetime.datetime.now().strftime('%m%d_%H_%M')
         self.n_epoch = 0
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         #=-=-=-=-=-=-=ENVIRONMENTS=-=-=-=-===-=-=-=-=-=-=
         env = {'Construction': Construction(), 'Improvement': Improvement()
             }.get(general_config['environment'])
         #=-=-=-=-=-=-=TRAINER=-=-=-=-===-=-=-=-=-=-=
-        if general_config['trainer'] == 'A2C':
-            trainer = A2C(config['critic'])
-        elif general_config['trainer'] == 'REINFORCE':
-            trainer = Reinforce(config['baseline'])
+        # if general_config['trainer'] == 'A2C':
+        #     trainer = ActorCritic(config['critic'])
+        if general_config['trainer'] == 'REINFORCE':
+            trainer = Reinforce(self.device, config['baseline'])
         #=-=-=-=-===-=-=-=-=-=-=MODEL=-=-=-=-===-=-=-=-=-=-=
         if general_config['model'] == 'PointerNetwork':
-            self.wrapped_actor = PtrNetWrapped(env, trainer, config['actor'], config['optimiser'])
+            self.wrapped_actor = PtrNetWrapped(env, trainer, self.device, config['actor'], config['optimiser'])
         elif general_config['model'] == 'TSP_improve':
-            self.wrapped_actor = TSP_improveWrapped(env, trainer, config['actor'], config['optimiser'])
+            self.wrapped_actor = TSP_improveWrapped(env, trainer, self.device, config['actor'], config['optimiser'])
         elif general_config['model'] == 'Transformer':
-            self.wrapped_actor = TransformerWrapped(env, trainer, config['actor'], config['optimiser'])
+            self.wrapped_actor = TransformerWrapped(env, trainer, self.device, config['actor'], config['optimiser'])
 
-    def train(self, p_size, data_type="tensor", path=None):
+    def train_epoch(self, p_size, data_type="tensor", path=None):
         # create files, setup stuff for SAVING DATA
         if data_type is "csv":
             csv_path = '{0}/{1}_{2}_train_data.csv'.format(self.folder, self.date, self.save_name)
@@ -65,7 +66,7 @@ class TrainTest:
         # loop through batches
         for i, path in zip(range((self.n_epoch*self.train_batch_epoch), (self.n_epoch*self.train_batch_epoch)+self.train_batch_epoch), path):
             #pass it through reinforcement learning algorithm to train
-            R, loss = self.wrapped_actor.train(self.train_batch_size, p_size, path=path)
+            R, loss = self.wrapped_actor.train_batch(self.train_batch_size, p_size, path=path)
             R_routed = [x for x in R if (x != 10000)]
             avgR = R.mean().item()
             if len(R_routed) != 0:
@@ -132,14 +133,15 @@ class TrainTest:
         self.n_epoch = epoch
 
 # MODEL
-folder = 'runs/Improvement'
-# folder = 'runs/Transformer'
-save_name = 'seqLen5_T6_RandomRoutable_50epoch'
+# folder = 'runs/ImprovementAttn2Pair'
+# folder = 'runs/ConstructionTransformer1Pair'
+folder = 'runs/ConstructionPntrNet1Pair'
+save_name = 'seqLen5_RandomRoutable_50epoch_expMvgBaseline_sanity'
 agent = TrainTest(folder, save_name)
 # agent.load(11)
 
 #TRAINING TESTING DETAILS
-n_epochs = 50
+n_epochs = 10
 test_n_batch = 1000
 prob_size = 5
 print("Number of epochs: {0}".format(n_epochs))
@@ -147,19 +149,13 @@ file = "datasets/n{0}b10({1}).pkg".format(prob_size, 1)
 agent.test(test_n_batch, prob_size, override_step=0)#, path=file)
 for j in range(n_epochs):
     #loop through batches of the test problems
-    agent.train(prob_size)#, path=file)
+    agent.train_epoch(prob_size)#, path=file)
     agent.test(test_n_batch, prob_size)#, path=file)
     print("Finished epoch: {0}".format(j))
     if j % 5 == 4:
         agent.save()
 agent.save()
-# i += 1
-# for j in range(i, i+n_epochs):
-#     train.train_epoch(n_batch_in_epoch, train_batch_size, test_n_batch, 7, j)
-# i += 1
-# for j in range(i, i+n_epochs):
-#     train.train_epoch(n_batch_in_epoch, train_batch_size, test_n_batch, 9, j)
-#
-# for prob_size in [3, 4, 5, 6, 8]:
-#     agent.load(10)
-#     agent.test(1000, prob_size, "console")
+
+for prob_size in [3, 4, 5, 6, 8]:
+    agent.load(10)
+    agent.test(1000, prob_size, "console")

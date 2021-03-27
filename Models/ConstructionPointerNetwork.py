@@ -86,11 +86,12 @@ class PtrNet(nn.Module):
             actions = probs.multinomial(1).squeeze(1) if sampling else probs.argmax(dim = 1) # pick an action, actions: torch.Size([100])
             # add it to various lists
             action_list.append(actions)
-            action_probs_list.append(probs.gather(0, actions.unsqueeze(dim=1)))
+            action_probs_list.append(probs[[x for x in range(len(probs))], actions.data])
+            # action_probs_list.append(probs.gather(0, actions.unsqueeze(dim=1)))
             # update for next loop
             mask = mask.scatter(1, actions.unsqueeze(dim=-1), True)
             dec_input = embd_graph[[i for i in range(n_batch)], action_list[-1].data, :] # takes the corresponding embeddedGraph[actions]
-        return action_probs_list, torch.stack(action_list, dim=0)
+        return torch.stack(action_probs_list, dim=1), torch.stack(action_list, dim=1)
 
 class PntrNetCritic(nn.Module):
     def __init__(self, model_config):
@@ -126,37 +127,34 @@ class PntrNetCritic(nn.Module):
 #how the model output is returned into reward and probability
 class PtrNetWrapped: #wrapper for model
     # creates the everything around the networks
-    def __init__(self, env, trainer, model_config, optimizer_config): # hyperparameteres
+    def __init__(self, env, trainer, device, model_config, optimizer_config): # hyperparameteres
         self.env = env
         self.trainer = trainer
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = device
         self.actor = PtrNet(model_config).to(self.device)
         self.trainer.passIntoParameters(self.actor.parameters(), optimizer_config)
 
     # given a problem size and batch size will train the model
-    def train(self, n_batch, p_size, path=None):
+    def train_batch(self, n_batch, p_size, path=None):
         problems = self.env.gen(n_batch, p_size).to(self.device) if (path is None) else self.env.load(path, n_batch).to(self.device) # generate or load problems
         # run through the model
         self.actor.train()
         action_probs_list, action_list = self.actor(problems, sampling=True) #action_probs_list (n_node x [n_batch])
         # calculate reward and probability
-        reward = self.env.evaluate(problems.detach(), action_list.transpose(0, 1)).to(self.device)
-        probs = action_probs_list[0]
-        for i in range(1, len(action_probs_list)):
-            probs = probs * action_probs_list[i]
+        reward = self.env.evaluate(problems, action_list).to(self.device)
+        probs = action_probs_list.prod(dim=1)
         # use this to train
-        R, loss = self.trainer.train(problems, reward.unsqueeze(dim=0), probs.unsqueeze(dim=0), self.actor, self.env)
-        return R, loss
+        loss_dict = self.trainer.train(problems, action_list.unsqueeze(dim=0), reward.unsqueeze(dim=0), probs.unsqueeze(dim=0))
+        return reward, loss_dict
 
     # given a batch size and problem size will test the model
     def test(self, n_batch, p_size, path=None):
         problems = self.env.gen(n_batch, p_size).to(self.device) if (path is None) else self.env.load(path, n_batch).to(self.device) # generate or load problems
         # run through model
         self.actor.eval()
-        problems = problems.to(self.device)
         action_probs_list, action_list = self.actor(problems, sampling=True)
-        R = self.env.evaluate(problems, action_list.transpose(0, 1)).to(self.device)
-        return R
+        reward = self.env.evaluate(problems, action_list).to(self.device)
+        return reward
 
     def save(self):
         model_dict = {}
