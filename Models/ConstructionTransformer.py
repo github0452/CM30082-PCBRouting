@@ -55,41 +55,38 @@ class Transformer(nn.Module):
             last = torch.gather(node_context, 1, visit_idx).transpose(0, 1)
             if len(action_probs_list) == 1:
                 first = last
-        return action_probs_list, torch.stack(action_list, dim=0)
+        return torch.stack(action_probs_list, dim=1), torch.stack(action_list, dim=1)
 
 class TransformerWrapped:
         # creates the everything around the networks
-        def __init__(self, env, trainer, model_config, optimizer_config): # hyperparameteres
+        def __init__(self, env, trainer, device, model_config, optimizer_config): # hyperparameteres
             self.env = env
             self.trainer = trainer
-            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            self.device = device
             self.actor = Transformer(model_config).to(self.device)
             self.trainer.passIntoParameters(self.actor.parameters(), optimizer_config)
 
         # given a problem size and batch size will train the model
-        def train(self, n_batch, p_size, path=None):
+        def train_batch(self, n_batch, p_size, path=None):
             problems = self.env.gen(n_batch, p_size).to(self.device) if (path is None) else self.env.load(path, n_batch).to(self.device) # generate or load problems
             # run through the model
             self.actor.train()
-            action_probs_list, action_list = self.actor(problems, sampling=True) #action_probs_list (n_node x [n_batch])
+            action_probs_list, action_list = self.actor(problems, sampling=True)
             # calculate reward and probability
-            reward = self.env.evaluate(problems.detach(), action_list.transpose(0, 1)).to(self.device)
-            probs = action_probs_list[0]
-            for i in range(1, len(action_probs_list)):
-                probs = probs * action_probs_list[i]
+            reward = self.env.evaluate(problems, action_list).to(self.device)
+            probs = action_probs_list.prod(dim=1)
             # use this to train
-            R, loss = self.trainer.train(problems, reward.unsqueeze(dim=0), probs.unsqueeze(dim=0), self.actor, self.env)
-            return R, loss
+            loss_dict = self.trainer.train(problems, action_list.unsqueeze(dim=0), reward.unsqueeze(dim=0), probs.unsqueeze(dim=0))
+            return reward, loss_dict
 
         # given a batch size and problem size will test the model
         def test(self, n_batch, p_size, path=None):
             problems = self.env.gen(n_batch, p_size).to(self.device) if (path is None) else self.env.load(path, n_batch).to(self.device) # generate or load problems
             # run through model
             self.actor.eval()
-            problems = problems.to(self.device)
             action_probs_list, action_list = self.actor(problems, sampling=True)
-            R = self.env.evaluate(problems, action_list.transpose(0, 1)).to(self.device)
-            return R
+            reward = self.env.evaluate(problems, action_list).to(self.device)
+            return reward
 
         def save(self):
             model_dict = {}

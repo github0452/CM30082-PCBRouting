@@ -74,23 +74,51 @@ class TSP_improve(nn.Module):
         logits = self.L_decoder(fusion, prev_exchange, solution_indexes) # # att torch.Size([batch_size, n_node^2])
         # select or sample
         pair_index = logits.multinomial(1) if do_sample else logits.max(-1)[1].view(-1,1)
-        selected_likelihood = logits.gather(1, pair_index)
+        selected_likelihood = logits.gather(1, pair_index).squeeze(dim=-1)
         col_selected = pair_index % n_node
         row_selected = pair_index // n_node
         pair = torch.cat((row_selected,col_selected),-1)
         return selected_likelihood, pair
 
+class TSP_improveCritic(nn.Module):
+    def __init__(self, model_config):
+        super().__init__() #initialise nn.Modules
+        dim_model = int(model_config['dim_model'])
+        dim_hidden = int(model_config['dim_hidden'])
+        dim_k = int(model_config['dim_k'])
+        dim_v = int(model_config['dim_v'])
+        n_layers = int(model_config['n_layers'])
+        n_head = int(model_config['n_head'])
+        self.L_embedder = GraphEmbedding(dim_model, usePosEncoding=True)
+        self.L_encoder = nn.Sequential(*(TransformerEncoderL(n_head, dim_model, dim_hidden, dim_k, dim_v) for _ in range(n_layers)))
+        self.L_project_graph = nn.Linear(dim_model, dim_model, bias=False)
+        self.L_project_node = nn.Linear(dim_model, dim_model, bias=False)
+        self.L_decoder = FeedForward(dim_model, dim_hidden, 1)
+
+    def forward(self, problems, solution_indexes):
+        n_node = problems.size(1)
+        x_embed = self.L_embedder(problems, solution_indexes)
+        x_encode = self.L_encoder(x_embed) # torch.Size([2, 50, 128])
+        # embd graph and node features
+        max_pooling = x_encode.max(1)[0] # max Pooling
+        graph_feature = self.L_project_graph(max_pooling)[:, None, :]
+        node_feature = self.L_project_node(x_encode)
+        # pass it through decoder
+        fusion = node_feature + graph_feature.expand_as(node_feature) # torch.Size([batch_size, n_node, 128])
+        value = self.L_decoder(fusion.mean(dim=1))
+        return value
+
 class TSP_improveWrapped:
-    def __init__(self, env, trainer, model_config, optimizer_config):
+    def __init__(self, env, trainer, device, model_config, optimizer_config):
         self.env = env
         self.trainer = trainer
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = device
         self.actor = TSP_improve(model_config).to(self.device)
         self.trainer.passIntoParameters(self.actor.parameters(), optimizer_config)
         self.T = int(optimizer_config['T'])
 
     # given a problem size and batch size will train the model
-    def train(self, n_batch, p_size, path=None):
+    def train_batch(self, n_batch, p_size, path=None):
         problems = self.env.gen(n_batch, p_size).to(self.device) if (path is None) else self.env.load(path, n_batch).to(self.device) # generate or load problems
         # setup inital parameters
         state = self.env.getStartingState(n_batch, p_size).to(self.device)
@@ -123,16 +151,16 @@ class TSP_improveWrapped:
             t += 1
         # train
         # Get discounted R
-        Reward = []
+        flipped_returns = []
         reward_reversed = reward_history[::-1]
         next_return = 0
         for r in reward_reversed:
-            R = next_return * 0.9 + r
-            Reward.append(R)
-            next_return = R
-        likelihood = torch.stack(prob_history, 0)
-        Reward = torch.stack(Reward[::-1], 0)
-        R, loss_dict = self.trainer.train(problems, Reward, likelihood.squeeze(-1), self.actor, self.env)
+            next_return = next_return * 0.9 + r
+            flipped_returns.append(next_return)
+        probabilities = torch.stack(prob_history, 0)
+        expected_returns = torch.stack(flipped_returns[::-1], 0)
+        states = torch.stack(state_history, 0)
+        loss_dict = self.trainer.train(problems, states, expected_returns, probabilities)
         return best_so_far, loss_dict
 
     # given a batch size and problem size will test the model

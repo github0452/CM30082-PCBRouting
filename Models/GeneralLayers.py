@@ -91,11 +91,12 @@ class MultiHeadAttention(nn.Module):
         return q
 
 class FeedForward(nn.Sequential):
-    def __init__(self, dim_model, dim_hidden, dropout=0.1):
+    def __init__(self, dim_model, dim_hidden, dim_out=None):
+        dim_out = dim_model if dim_out is None else dim_out
         super().__init__(
             nn.Linear(dim_model, dim_hidden),
 	        nn.ReLU(inplace = False),
-            nn.Linear(dim_hidden, dim_model)
+            nn.Linear(dim_hidden, dim_out)
         ) #initialise nn.Modules
         # inputs: [n_batch, n_node, dim_model]
         # outputs: [n_batch, n_node, dim_model]

@@ -64,7 +64,7 @@ class Environment:
 class Construction(Environment):
     def initialState(self, problems):
         pass
-    
+
     def step(self, cur_state, step):
         if cur_state is not None:
             next_state = torch.cat((cur_state, step.unsqueeze(dim=1)), dim=1)
@@ -83,24 +83,20 @@ class Improvement(Environment):
         initial_solution = torch.linspace(0, prob_size-1, steps=prob_size).expand(list_size, prob_size)
         return initial_solution
 
+    # cur_state: [n_batch, n_nodes]
     def step(self, cur_state, step):
-        device = cur_state.device
-        step_num = step.clone().cpu().numpy()
-        rec_num = cur_state.clone().cpu().numpy()
-        for i in range(cur_state.size()[0]):
-            loc_of_first = np.where(rec_num[i] == step_num[i][0])[0][0]
-            loc_of_second = np.where(rec_num[i] == step_num[i][1])[0][0]
-            # temp = rec_num[i][loc_of_first]
-            # rec_num[i][loc_of_first] = rec_num[i][loc_of_second]
-            # rec_num[i][loc_of_second] = temp
-            if( loc_of_first < loc_of_second):
-                rec_num[i][loc_of_first:loc_of_second+1] = np.flip(
-                        rec_num[i][loc_of_first:loc_of_second+1])
+        step_np = step.clone().cpu().numpy()
+        state_np = cur_state.clone().cpu().numpy()
+        for action, state in zip(step_np, state_np):
+            a_1 = np.where(state == action[0])[0][0]
+            a_2 = np.where(state == action[1])[0][0]
+            if (a_1 < a_2):
+                state[a_1:a_2+1] = np.flip(state[a_1:a_2+1])
             else:
-                temp = rec_num[i][loc_of_first]
-                rec_num[i][loc_of_first] = rec_num[i][loc_of_second]
-                rec_num[i][loc_of_second] = temp
-        return torch.tensor(rec_num).to(device)
+                temp = state[a_1]
+                state[a_1] = state[a_2]
+                state[a_2] = temp
+        return torch.tensor(state_np).to(cur_state.device)
 
     def isDone(self):
         pass
@@ -109,6 +105,21 @@ if __name__ == "__main__":
     batchSize = 1
     seqLen = 3
     env = Construction()
+
+    array = torch.tensor([[0, 1, 2, 3], [0, 1, 2, 3]])
+    valuesToSwap = torch.tensor([[3, 2], [0, 4]])
+
+    step_np = valuesToSwap.clone().cpu().numpy()
+    state_np = array.clone().cpu().numpy()
+    state_np = np.insert(state_np, 0, -1, axis=1)
+    for action, state_row in zip(step_np, state_np):
+        a_1 = np.where(state_row == action[0])[0][0]
+        state_row[0:a_1-1] = state_row[1:a_1]
+        state_row[a_1-1] = action[1]
+    # for i in range(array.size(dim=0)):
+    #
+    #     print(np.insert(state_np, [i, a_1], step_np[i][1]))
+    print(torch.tensor(state_np))
     #experimenting with steps
     # problems = torch.Tensor(env.genProblems(batchSize, seqLen))
     # state = None
