@@ -1,33 +1,10 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# **Checklist**
-#  * setup openAI Gym[x]
-#  * setup pytorch[x]
-#  * build basic pointer network on CPU [ ]
-#  * build train function (using policy-based method reinforce) on CPU on construction problem [ ]
-#  * make it run on the GPU on construction problem [ ]
-#  * do so for the improvement problem [ ]
-#  * build train funciton (using DQL)
-
-# **What i want to achieve**
-# 1. experiment with different reinforcement learning algorithms
-#    * policy-based method reinforcement
-#    * value-based Deep Q Learning
-#    * MCTS
-# 2. generalise to different problem sizes
-# 3. compare different problem structures (constrution, improvement)
-# 4. compare to baselines
-
 #Check python version
 from platform import python_version
 print("Python version: ", python_version())
 assert python_version() == "3.7.9"
-
-
-# **Setup OpenAI Gym**
-#
-# Want to setup openAI environment
 
 #imports
 import copt
@@ -46,6 +23,7 @@ from torch.utils.tensorboard import SummaryWriter
 import numpy as np
 import random
 import math
+from Environments import Environment
 
 # if gpu is to be used
 if torch.cuda.is_available():
@@ -80,6 +58,112 @@ if CHECK_GPU_DETAILS:
 
 print(torch.__version__)
 
+# time taken
+# solution quality
+# solution % routed
+class Baselines:
+    def __init__(self):
+        self.device = None
+
+    def bruteForce(self, problems, earlyExit=0):
+        solutions = []
+        for problem in problems:
+            results = copt.bruteForce(problem, earlyExit)
+            if len(results) != 0:
+                best = results[0]
+                solution = (best['success'], best['nRouted'], best['order'], best['measure'])
+            else:
+                solution = (0, -1, -1, 0.0)
+            solutions.append(solution)
+        return solutions
+
+    def randomSampling(self, problems):
+        solutions = []
+        for problem in problems:
+            seqLen = len(problem)
+            order = np.random.permutation(seqLen).tolist()
+            eval = copt.evaluate(problem,order)
+            solution = (eval['success'], eval['nRouted'], eval['order'], eval['measure'])
+            solutions.append(solution)
+        return solutions
+
+    def NN(self, problems):
+        solutions = []
+        for problem in problems:
+            seqLen = len(problem)
+            order = []
+            for elementNo in range(seqLen):
+                options = []
+                for i in range(seqLen):
+                    if i not in order:
+                        tempOrder = order.copy()
+                        tempOrder.append(i)
+                        eval = copt.evaluate(problem, tempOrder)
+                        options.append((i, eval['success'], eval['measure']))
+                routedOptions = [x for x in options if x[1] == 1]
+                routedOptions.sort(key=lambda tup: tup[2], reverse=False)
+                if (len(routedOptions) != 0):
+                    order.append(routedOptions[0][0])
+                else:
+                    order.append(options[0][0])
+            eval = copt.evaluate(problem,order)
+            solution = (eval['success'], eval['nRouted'], eval['order'], eval['measure'])
+            solutions.append(solution)
+        return solutions
+
+    def RoutableRRHillClimbing(self, problems, numRestarts=1):
+        solutions = []
+        # for each problem
+        for problem in problems:
+            restartSolutions = []
+            # restart this number of times
+            for restartCount in range(numRestarts):
+                seqLen = len(problem)
+                # need to first find a initial routable solution
+                initialSolutions = copt.bruteForce(problem, 1)
+                if len(initialSolutions) != 0:
+                    order = copt.bruteForce(problem, 1)[0]['order']
+                    eval = copt.evaluate(problem, order)
+                    oldMeasure = eval['measure']
+                    improvement = True
+                    oldMeasure = 0
+                    while improvement == True:
+                        #consider all the options
+                        options = []
+                        for i,j in itertools.product(range(seqLen), range(seqLen)):
+                            if i != j:
+                                tempOrder = order.copy()
+                                tempOrder[i],tempOrder[j] = order[j],order[i]
+                                eval = copt.evaluate(problem, tempOrder)
+                                options.append((i, eval['success'], eval['measure']))
+                        routedOptions = [x for x in options if x[1] == 1]
+                        routedOptions.sort(key=lambda tup: tup[2], reverse=False)
+                        if (len(routedOptions) != 0):
+                            newMeasure = routedOptions[0][2]
+                            if (newMeasure < oldMeasure):
+                                swapElements = routedOptions[0]
+                                i,j = swapElements[0],swapElements[1]
+                                order[i],order[j] = order[j],order[i]
+                                oldMeasure = newMeasure
+                            else:
+                                improvement=False
+                        else:
+                            improvement = False
+                    eval = copt.evaluate(problem,order)
+                    solution = (eval['success'], eval['nRouted'], eval['order'], eval['measure'])
+                else:
+                    solution = (0, -1, -1, 0.0)
+                restartSolutions.append(solution)
+            restartSolutions.sort(key=lambda tup: tup[3], reverse=False)
+            bestRestartSolution = restartSolutions[0]
+            solutions.append(bestRestartSolution)
+        return solutions
+
+    def simulatedAnnealing(self, problems):
+        pass
+
+    def tabuSearch(self, problems):
+        pass
 
 
 # solutions: (isSuccessfullyRouted, numPointsRouted, order, measure)
@@ -180,3 +264,19 @@ def test(batchSize, seqLen):
     # runMetrics(100, 8, TENSORBOARD_write)
     # runMetrics(100, 9, TENSORBOARD_write)
     # runMetrics(100, 10, TENSORBOARD_write)
+
+batchSize = 5
+prob_size = 7
+for i in range(batchSize):
+    # print("=-=-=-=-=Problems ", averageCount, "=-=-=-=-=-=")
+    problem = copt.getProblem(prob_size) #generate problem
+    # check the problem is valid
+    invalidPointNo = len([ 1 for x in problem for y in problem if x != y
+        and (np.linalg.norm(np.subtract(x, y)[:2],2) < 30
+        or np.linalg.norm(np.subtract(x, y)[2:],2) < 30) ])
+    if (invalidPointNo == 0):
+        results = copt.bruteForce(problem)
+        results = [(x['measure'], x['order']) for x in results]
+        print(results)
+    else:
+        print("invalid")
