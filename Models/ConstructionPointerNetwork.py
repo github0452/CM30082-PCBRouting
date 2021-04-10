@@ -107,10 +107,10 @@ class PntrNetCritic(nn.Module):
         self.L_decoder = nn.Sequential(
                     nn.Linear(dim_model, dim_model, bias = False),
 			        nn.ReLU(inplace = False),
-                    nn.Linear(dim_model, 1, bias = True))
+                    nn.Linear(dim_model, 1, bias = False))
 
-    def forward(self, inputs):
-        embd_graph = self.L_embedder(inputs)
+    def forward(self, problems, states):
+        embd_graph = self.L_embedder(problems)
         enc_states, (h, c) = self.L_encoder(embd_graph) # encoder_states: torch.Size([n_batch, n_node, dim_model])
         query = h.squeeze(0) #the hidden step after all the elements of the sequence were processed
         for i in range(self.n_process):
@@ -127,41 +127,43 @@ class PntrNetCritic(nn.Module):
 #how the model output is returned into reward and probability
 class PtrNetWrapped: #wrapper for model
     # creates the everything around the networks
-    def __init__(self, env, trainer, device, model_config, optimizer_config): # hyperparameteres
+    def __init__(self, env, trainer, device, config): # hyperparameteres
         self.env = env
         self.trainer = trainer
         self.device = device
-        self.actor = PtrNet(model_config).to(self.device)
-        self.trainer.passIntoParameters(self.actor.parameters(), optimizer_config)
+        self.actor = PtrNet(config).to(self.device)
+        self.trainer.passIntoParameters(self.actor.parameters(), config)
 
     # given a problem size and batch size will train the model
     def train_batch(self, n_batch, p_size, path=None):
-        problems = self.env.gen(n_batch, p_size).to(self.device) if (path is None) else self.env.load(path, n_batch).to(self.device) # generate or load problems
+        problems = self.env.gen(n_batch, p_size, self.device) if (path is None) else self.env.load(path, n_batch, self.device) # generate or load problems
         # run through the model
         self.actor.train()
+        # with torch.autograd.profiler.profile(use_cuda=True, profile_memory=True, with_stack=True) as prof:
         action_probs_list, action_list = self.actor(problems, sampling=True) #action_probs_list (n_node x [n_batch])
+        # print(prof.key_averages().table(sort_by="self_cpu_time_total"))
         # calculate reward and probability
-        reward = self.env.evaluate(problems, action_list).to(self.device)
+        reward = self.env.evaluate(problems, action_list, self.device)
         probs = action_probs_list.prod(dim=1)
         # use this to train
-        loss_dict = self.trainer.train(problems, action_list.unsqueeze(dim=0), reward.unsqueeze(dim=0), probs.unsqueeze(dim=0))
-        return reward, loss_dict
+        actor_loss, baseline_loss = self.trainer.train(problems, action_list.unsqueeze(dim=0), reward.unsqueeze(dim=0), probs.unsqueeze(dim=0))
+        return reward, actor_loss, baseline_loss
 
     # given a batch size and problem size will test the model
     def test(self, n_batch, p_size, path=None):
-        problems = self.env.gen(n_batch, p_size).to(self.device) if (path is None) else self.env.load(path, n_batch).to(self.device) # generate or load problems
+        problems = self.env.gen(n_batch, p_size, self.device) if (path is None) else self.env.load(path, n_batch, self.device) # generate or load problems
         # run through model
         self.actor.eval()
         action_probs_list, action_list = self.actor(problems, sampling=True)
-        reward = self.env.evaluate(problems, action_list).to(self.device)
+        reward = self.env.evaluate(problems, action_list, self.device)
         return reward
 
     def save(self):
         model_dict = {}
-        model_dict['actor_model_state_dict'] = self.actor.actor.state_dict()
+        model_dict['actor_model_state_dict'] = self.actor.state_dict()
         model_dict.update(self.trainer.save())
         return model_dict
 
     def load(self, checkpoint):
-        self.actor.actor.load_state_dict(checkpoint['actor_model_state_dict'])
+        self.actor.load_state_dict(checkpoint['actor_model_state_dict'])
         self.trainer.load(checkpoint)

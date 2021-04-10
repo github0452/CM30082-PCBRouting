@@ -102,30 +102,34 @@ class FeedForward(nn.Sequential):
         # outputs: [n_batch, n_node, dim_model]
 
 class TransformerEncoderL(nn.Sequential):
-    def __init__(self, n_head, dim_model, dim_hidden, dim_k, dim_v, dropout=0.1):
+    def __init__(self, n_head, dim_model, dim_hidden, dim_k, dim_v, batch_norm=True, momentum=0.1):
         super().__init__() #initialise nn.Modules
         self.MMA = SkipConnection(MultiHeadAttention(dim_model, dim_k, dim_v, n_head))
-        self.norm_1 = Normalization(dim_model)
         self.FF = SkipConnection(FeedForward(dim_model, dim_hidden))
-        self.norm_2 = Normalization(dim_model)
+        self.batch_norm = batch_norm
+        if self.batch_norm:
+            self.norm_1 = Normalization(dim_model, momentum)
+            self.norm_2 = Normalization(dim_model, momentum)
 
     # inputs: [batch_size, n_node, embedding_size]
     # outputs: [batch_size, n_node, embedding_size]
     def forward(self, inputs):
         enc_output = self.MMA(inputs) #how is the multihead attention pulled together? mean? addition?
-        enc_output = self.norm_1(enc_output)
+        if self.batch_norm:
+            enc_output = self.norm_1(enc_output)
         enc_output = self.FF(enc_output)
-        enc_output = self.norm_2(enc_output)
+        if self.batch_norm:
+            enc_output = self.norm_2(enc_output)
         return enc_output
 
 class Normalization(nn.Module):
-    def __init__(self, embed_dim, normalization='batch'):
+    def __init__(self, embed_dim, momentum=0.1, normalization='batch'):
         super(Normalization, self).__init__()
         normalizer_class = {
             'batch': nn.BatchNorm1d,
             'instance': nn.InstanceNorm1d
         }.get(normalization, None)
-        self.normalizer = normalizer_class(embed_dim, affine=True)
+        self.normalizer = normalizer_class(embed_dim, momentum=momentum, affine=True)
         # Normalization by default initializes affine parameters with bias 0 and weight unif(0,1) which is too large!
         # self.init_parameters()
 

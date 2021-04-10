@@ -2,6 +2,8 @@ import csv
 import datetime
 import configparser
 import os
+import numpy as np
+from pathlib import Path
 
 import torch
 from torch.utils.tensorboard import SummaryWriter
@@ -13,149 +15,131 @@ from Models.ConstructionTransformer import TransformerWrapped
 from RLAlgorithm.PolicyBasedTrainer import Reinforce
 
 class TrainTest:
-    def __init__(self, folder, save_name):
-        path = '{0}/configuration.cfg'.format(folder)
-        config = configparser.ConfigParser()
-        config.read(path)
-        print("Reading config from path", path)
-        print(dict({key:dict(value) for (key,value) in config.items()}))
-        # load some parameters
-        general_config = config['general']
-        self.train_batch_size = int(general_config['train_batch_size'])
-        self.train_batch_epoch = int(general_config['train_batch_epoch'])
-        # generate some parameters
-        self.folder = folder
-        self.save_name = save_name
-        self.date = datetime.datetime.now().strftime('%m%d_%H_%M')
+    def __init__(self, config):
+        print("using config:", config)
+        # check device
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # setup data stuff
+        data_path = config['data_path']
+        Path(data_path).mkdir(parents=True, exist_ok=True)
+        self.csv, self.tensor = None, None
+        if bool(config['save_csv']):
+            self.csv = {'train': '{0}/train.csv'.format(data_path),
+                'test': '{0}/test.csv'.format(data_path)}
+            with open(self.csv['train'], 'w') as file:
+                csv.writer(file).writerow(["step", "AvgRoutedR", "AvgR", "AvgRouted%", "ActorLoss", "BaselineLoss"])
+            with open(self.csv['test'], 'w') as file:
+                csv.writer(file).writerow(["step", "AvgRoutedR", "AvgR", "AvgRouted%"])
+        if bool(config['save_tensor']):
+            self.tensor = '{0}/tensor'.format(data_path)
+        self.model = '{0}/checkpoint'.format(data_path)
+        # setup testing and training stuff
         self.n_epoch = 0
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        #=-=-=-=-=-=-=ENVIRONMENTS=-=-=-=-===-=-=-=-=-=-=
-        env = {'Construction': Construction(), 'Improvement': Improvement()
-            }.get(general_config['environment'])
-        #=-=-=-=-=-=-=TRAINER=-=-=-=-===-=-=-=-=-=-=
-        # if general_config['trainer'] == 'A2C':
-        #     trainer = ActorCritic(config['critic'])
-        if general_config['trainer'] == 'REINFORCE':
-            trainer = Reinforce(self.device, config['baseline'])
+        self.n_batch = int(config['n_batch'])
+        self.n_batch_train_size = int(config['n_batch_train_size'])
+        self.n_batch_test_size = int(config['n_batch_test_size'])
+        #=-=-=-=-=-=-=ENVIRONMENTS and TRAINER=-=-=-=-===-=-=-=-=-=-=
+        env = {'Construction': Construction(), 'Improvement': Improvement()}.get(config['environment'])
+        trainer = Reinforce(device, config)
         #=-=-=-=-===-=-=-=-=-=-=MODEL=-=-=-=-===-=-=-=-=-=-=
-        if general_config['model'] == 'PointerNetwork':
-            self.wrapped_actor = PtrNetWrapped(env, trainer, self.device, config['actor'], config['optimiser'])
-        elif general_config['model'] == 'TSP_improve':
-            self.wrapped_actor = TSP_improveWrapped(env, trainer, self.device, config['actor'], config['optimiser'])
-        elif general_config['model'] == 'Transformer':
-            self.wrapped_actor = TransformerWrapped(env, trainer, self.device, config['actor'], config['optimiser'])
+        model_type = config['model']
+        if model_type == 'PointerNetwork': self.wrapped_actor = PtrNetWrapped(env, trainer, device, config)
+        elif model_type == 'Transformer': self.wrapped_actor = TransformerWrapped(env, trainer, device, config)
+        elif model_type == 'TSP_improve': self.wrapped_actor = TSP_improveWrapped(env, trainer, device, config)
 
-    def train_epoch(self, p_size, data_type="tensor", path=None):
-        # create files, setup stuff for SAVING DATA
-        if data_type is "csv":
-            csv_path = '{0}/{1}_{2}_train_data.csv'.format(self.folder, self.date, self.save_name)
-            with open(csv_path, 'w', newline='') as file:
-                writer = csv.writer(file)
-                writer.writerow(["step", "AvgRoutedR", "AvgR", "AvgRouted%"] + self.mode.additonal_params())
-        elif data_type is "tensor":
-            tensor_path = '{0}/{1}_{2}_tensor'.format(self.folder, self.date, self.save_name)
-            t_board = SummaryWriter(tensor_path)
-        # setup test data location if needed
-        if path is not None:
-            if isinstance(path, str):
-                path = [path for _ in range(self.train_batch_epoch)]
-            elif not isinstance(path, list) or len(path) < self.train_batch_epoch:
-                raise NotImplementedError
-        else:
-            path = [None for _ in range(self.train_batch_epoch)]
+    def train(self, p_size, prob_path=None):
         # loop through batches
-        for i, path in zip(range((self.n_epoch*self.train_batch_epoch), (self.n_epoch*self.train_batch_epoch)+self.train_batch_epoch), path):
+        init = self.n_epoch*self.n_batch
+        for i in range(init, init+self.n_batch):
             #pass it through reinforcement learning algorithm to train
-            R, loss = self.wrapped_actor.train_batch(self.train_batch_size, p_size, path=path)
+            R, actor_loss, baseline_loss = self.wrapped_actor.train_batch(self.n_batch_train_size, p_size, path=prob_path)
             R_routed = [x for x in R if (x != 10000)]
             avgR = R.mean().item()
-            if len(R_routed) != 0:
-                avgRoutedR = sum(R_routed)/len(R_routed)
-                percRouted = len(R_routed)*100/self.train_batch_size
-            else:
-                avgRoutedR = 10000
-                percRouted = 0.
-            if data_type is "csv":
-                with open(csv_path, 'w', newline='') as file:
-                    writer = csv.writer(file)
-                    writer.writerow([i, avgRoutedR, avgR, percRouted] + list(loss))
-            elif data_type is "tensor":
+            avgRoutedR = sum(R_routed).item()/len(R_routed) if len(R_routed) > 0 else 10000
+            percRouted = len(R_routed)*100/self.n_batch_train_size
+            if self.csv is not None:
+                with open(self.csv['train'], 'a') as file:
+                    csv.writer(file).writerow([i, avgRoutedR, avgR, percRouted, actor_loss.item(), baseline_loss.item()])
+            if self.tensor is not None:
+                t_board = SummaryWriter(self.tensor)
                 t_board.add_scalar('Train/AvgRoutedR', avgRoutedR, global_step = i)
                 t_board.add_scalar('Train/AvgR', avgR, global_step = i)
                 t_board.add_scalar('Train/AvgRouted%', percRouted, global_step = i)
-                for k in loss.keys():
-                    t_board.add_scalar('Train/{0}'.format(k), loss[k], global_step = i)
-        self.n_epoch += 1
+                t_board.add_scalar('Train/ActorLoss', actor_loss.item(), global_step = i)
+                t_board.add_scalar('Train/BaselineLoss', baseline_loss.item(), global_step = i)
 
-    def test(self, n_batch, p_size, data_type="tensor", path=None, override_step=None):
-        if override_step is not None:
-            epoch = override_step
-        else:
-            epoch = self.n_epoch
-        date = datetime.datetime.now().strftime('%m%d_%H_%M')
-        # create files, setup stuff
-        if data_type is "csv":
-            csv_path = '{0}/{1}_{2}_test_data.csv'.format(self.folder, self.date, self.save_name)
-            with open(csv_path, 'w', newline='') as file:
-                writer = csv.writer(file)
-                writer.writerow(["step", "AvgRoutedR", "AvgR", "AvgRouted%"])
-        elif data_type is "tensor":
-            tensor_path = '{0}/{1}_{2}_tensor'.format(self.folder, self.date, self.save_name)
-            t_board = SummaryWriter(tensor_path)
+    def test(self, p_size, prob_path=None):
         # run tests
-        R = self.wrapped_actor.test(n_batch, p_size, path=path)
+        R = self.wrapped_actor.test(self.n_batch_test_size, p_size, path=prob_path)
         R_routed = [x for x in R if (x != 10000)]
         avgR = R.mean().item()
-        if len(R_routed) != 0:
-            avgRoutedR = sum(R_routed)/len(R_routed)
-            percRouted = len(R_routed)*100/n_batch
-        else:
-            avgRoutedR = 10000
-            percRouted = 0.
-        if data_type is "csv":
-            writer.writerow([i, avgRoutedR, avgR, percRouted])
-        elif data_type is "tensor":
-            t_board.add_scalar('Test/AvgRoutedR', avgRoutedR, global_step = epoch)
-            t_board.add_scalar('Test/AvgR', avgR, global_step = epoch)
-            t_board.add_scalar('Test/AvgRouted%', percRouted, global_step = epoch)
-        elif data_type is "console":
-            print("Prob size: {0}, avgRoutedR: {1}, percRouted: {2}".format(p_size, avgRoutedR, percRouted))
+        avgRoutedR = sum(R_routed).item()/len(R_routed) if len(R_routed) > 0 else 10000
+        percRouted = len(R_routed)*100/self.n_batch_test_size
+        if self.csv is not None:
+            with open(self.csv['test'], 'a') as file:
+                csv.writer(file).writerow([self.n_epoch, avgRoutedR, avgR, percRouted])
+        if self.tensor is not None:
+            t_board = SummaryWriter(self.tensor)
+            t_board.add_scalar('Test/AvgRoutedR', avgRoutedR, global_step = self.n_epoch)
+            t_board.add_scalar('Test/AvgR', avgR, global_step = self.n_epoch)
+            t_board.add_scalar('Test/AvgRouted%', percRouted, global_step = self.n_epoch)
+
+    def epoch(self, p_size, prob_path=None):
+        self.train(p_size, prob_path)
+        self.test(p_size, prob_path)
+        print("Epoch: {0}, Prob size: {1}, avgRoutedR: {2}, percRouted: {3}".format(self.n_epoch, p_size, avgRoutedR, percRouted))
+        self.n_epoch += 1
 
     def save(self):
-        file_path = "{0}/backup-epoch{1}".format(self.folder, self.n_epoch)
-        model_dict = self.wrapped_actor.trainer.save() #save training details
-        torch.save(model_dict, file_path)
+        model_dict = self.wrapped_actor.save() #save training details
+        model_dict['n_epoch'] = self.n_epoch
+        torch.save(model_dict, self.model)
 
-    def load(self, epoch):
-        file_path = "{0}/backup-epoch{1}".format(self.folder, epoch)
-        checkpoint = torch.load(file_path)
-        self.wrapped_actor.trainer.load(checkpoint) #load training details
-        self.n_epoch = epoch
+    def load(self):
+        checkpoint = torch.load(self.model)
+        self.wrapped_actor.load(checkpoint) #load training details
+        self.n_epoch = checkpoint['n_epoch']
 
 # MODEL
-# folder = 'runs/ImprovementAttn2Pair'
-# folder = 'runs/ConstructionTransformer1Pair'
-folder = 'runs/ConstructionPntrNet1Pair'
-save_name = 'seqLen5_RandomRoutable_50epoch_expMvgBaseline_sanity'
-agent = TrainTest(folder, save_name)
-# agent.load(11)
+# search_space = {
+#     "model": "PointerNetwork",
+#     "environment": "Construction",
+#     "data_path": "runs/Test2",
+#     "save_csv": True,
+#     "save_tensor": True,
+#     "n_batch": 10,
+#     "n_batch_train_size": 512,
+#     "n_batch_test_size": 1024,
+#     "baselineType": "ExpMovingAvg",
+#     "embedding": 128,
+#     "hidden": 128,
+#     "glimpse": 1,
+#     "maxGrad": 1,
+#     "actor_lr": 1e-3,
+#     "actor_lr_gamma": 0.96
+#     # "l2": tune.sample_from(lambda _: 2**np.random.randint(2, 9)),
+#     # "lr": tune.loguniform(1e-4, 1e-1),
+#     # "batch_size": tune.choice([2, 4, 8, 16]),
+#     # "data_dir": data_dir
+# }
+
+name = "ConstructionPointer"
+path = 'runs/{0}.cfg'.format(name)
+config = configparser.ConfigParser()
+config.read(path)
+print("Reading config from path", path)
+config = dict(config['config'])
 
 #TRAINING TESTING DETAILS
+agent = TrainTest(config=config)
 n_epochs = 10
-test_n_batch = 1000
 prob_size = 5
 print("Number of epochs: {0}".format(n_epochs))
-file = "datasets/n{0}b10({1}).pkg".format(prob_size, 1)
-agent.test(test_n_batch, prob_size, override_step=0)#, path=file)
-for j in range(n_epochs):
-    #loop through batches of the test problems
-    agent.train_epoch(prob_size)#, path=file)
-    agent.test(test_n_batch, prob_size)#, path=file)
-    print("Finished epoch: {0}".format(j))
-    if j % 5 == 4:
-        agent.save()
-agent.save()
+for epoch in range(1, n_epochs):
+    agent.epoch(prob_size)#, path=file)
+    agent.save()
 
-for prob_size in [3, 4, 5, 6, 8]:
-    agent.load(10)
-    agent.test(1000, prob_size, "console")
+# generalisation
+# for prob_size in [3, 4, 5, 6, 8]:
+#     agent.load(10)
+#     agent.test(1000, prob_size, "console")

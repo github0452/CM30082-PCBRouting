@@ -10,7 +10,7 @@ class Environment:
     def __init__(self):
         pass
 
-    def gen(self, list_size, prob_size, routableOnly=True):
+    def gen(self, list_size, prob_size, device, routableOnly=True):
         problems = []
         invalid = 0
         noSol = 0
@@ -28,11 +28,16 @@ class Environment:
             else:
                 invalid += 1
         print("Invalid problem: {0}, No solution problem: {1}".format(invalid, noSol))
-        random.shuffle(problems) # randomly shuffling the data to prevent any bias, e.g. if testing later with different problem sizes
-        return torch.FloatTensor(problems)
+        # randomly shuffling the data to prevent any bias, e.g. if testing later with different problem sizes
+        random.shuffle(problems)
+        if device == "cpu":
+            problems = torch.FloatTensor(problems)
+        else:
+            problems = torch.cuda.FloatTensor(problems)
+        return problems
 
     # problems: torch.Size([100, 5, 4]), orders [5, 100]
-    def evaluate(self, problems, orders, additional=None):
+    def evaluate(self, problems, orders, device):
         #convert everything to the right format
         n_node = problems.size(1)
         orders = orders.tolist()
@@ -48,18 +53,17 @@ class Environment:
                     reward.append(eval["measure"]/n_node)
             else:
                 reward.append(0)
-        # print(reward[0:10])
-        # print(torch.Tensor(reward[0:10]))
-        return torch.Tensor(reward)
+        reward = torch.as_tensor(reward, device=device)
+        return reward
 
-    def load(self, path, batch_size):
+    def load(self, path, batch_size, device):
         problems = pickle.load( open( path, "rb" ))
         problem_count = problems.size(0)
         if problem_count < batch_size: #repeat if needed
             multiply = -(-batch_size // problem_count)
             problems = problems.repeat(multiply, 1, 1)
         problems = problems[:batch_size] #trim
-        return problems
+        return problems.to(device)
 
 class Construction(Environment):
     def initialState(self, problems):
@@ -79,14 +83,14 @@ class Improvement(Environment):
     def __init__(self):
         pass
 
-    def getStartingState(self, list_size, prob_size):
-        initial_solution = torch.linspace(0, prob_size-1, steps=prob_size).expand(list_size, prob_size)
+    def getStartingState(self, list_size, prob_size, device):
+        initial_solution = torch.linspace(0, prob_size-1, steps=prob_size, device=device).expand(list_size, prob_size)
         return initial_solution
 
     # cur_state: [n_batch, n_nodes]
     def step(self, cur_state, step):
-        step_np = step.clone().cpu().numpy()
-        state_np = cur_state.clone().cpu().numpy()
+        step_np = step.cpu().numpy()
+        state_np = cur_state.cpu().numpy()
         for action, state in zip(step_np, state_np):
             a_1 = np.where(state == action[0])[0][0]
             a_2 = np.where(state == action[1])[0][0]
@@ -96,7 +100,8 @@ class Improvement(Environment):
                 temp = state[a_1]
                 state[a_1] = state[a_2]
                 state[a_2] = temp
-        return torch.tensor(state_np).to(cur_state.device)
+        state_np = torch.as_tensor(state_np, device=cur_state.device)
+        return state_np
 
     def isDone(self):
         pass
