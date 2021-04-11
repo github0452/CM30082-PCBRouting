@@ -142,16 +142,8 @@ def loadConfigFile(path):
     config = dict(config['config'])
     return config
 
-
-try:
-      opts, args = getopt.getopt(argv,"f",[])
-except getopt.GetoptError:
-  print 'test.py -f <configfile>'
-  sys.exit(2)
-
-for opt, arg in opts:
-    if opt == '-f':
-        path = arg
+path = sys.argv[1]
+print(path)
 # path = "runs/ImprovementTransformer.cfg"
 config = loadConfigFile(path)
 train_thingy(config)
