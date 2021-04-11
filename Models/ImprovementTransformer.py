@@ -113,54 +113,46 @@ class TSP_improveWrapped:
         self.device = device
         self.actor = TSP_improve(config).to(self.device)
         self.trainer.passIntoParameters(self.actor.parameters(), config)
-        self.T = int(config['T'])
+        self.T = int(config['t'])
 
     # given a problem size and batch size will train the model
     def train_batch(self, n_batch, p_size, path=None):
+        # with torch.autograd.profiler.profile(use_cuda=True, profile_memory=True, with_stack=True) as prof:
         problems = self.env.gen(n_batch, p_size, self.device) if (path is None) else self.env.load(path, n_batch, self.device) # generate or load problems
         # setup inital parameters
         state = self.env.getStartingState(n_batch, p_size, self.device)
         best_so_far = self.env.evaluate(problems, state, self.device)
         initial_result = best_so_far.clone()
+        # print(prof.key_averages().table(sort_by="self_cpu_time_total"))
         exchange = None
         # tracking stuff for information
-        action_history = [] #INFO
         state_history = []
         reward_history = [] #INFO
         prob_history = []
         # run through the model
-        t = 0
-        T = p_size ** self.T
         self.actor.train()
-        while t < T:
-            # with torch.autograd.profiler.profile(use_cuda=True, profile_memory=True, with_stack=True) as prof:
+        for _ in range(p_size ** self.T):
             probability, exchange = self.actor(problems, state, exchange)
-            # print("forward pass", prof.key_averages().table(sort_by="self_cpu_time_total"))
-            next_state = self.env.step(state, exchange)
+            state = self.env.step(state, exchange)
             # calculate reward
-            cost = self.env.evaluate(problems, next_state, self.device)
+            cost = self.env.evaluate(problems, state, self.device)
+            # reward = cost - best_so_far is negatie, otherwise reward = 0
             best_for_now = torch.cat((best_so_far[None, :], cost[None, :]), 0).min(0)[0]
             #save things
             reward_history.append(best_for_now - best_so_far)
-            action_history.append(exchange)
-            state_history.append(next_state)
+            state_history.append(state)
             prob_history.append(probability)
             #update for next iteration
-            state = next_state
             best_so_far = best_for_now
-            t += 1
         # train -  Get discounted R
-        flipped_returns = []
-        reward_reversed = reward_history[::-1]
-        # next_return = 0
-        next_return = self.trainer.useBaseline(problems, state).squeeze(-1)
-        for r in reward_reversed:
+        expected_returns = []
+        reward_history = reward_history[::-1]
+        next_return = 0
+        # next_return = self.trainer.useBaseline(problems, state).squeeze(-1)
+        for r in reward_history:
             next_return = next_return * 0.9 + r
-            flipped_returns.append(next_return)
-        probabilities = torch.stack(prob_history, 0)
-        expected_returns = torch.stack(flipped_returns[::-1], 0)
-        states = torch.stack(state_history, 0)
-        actor_loss, baseline_loss = self.trainer.train(problems, states, expected_returns, probabilities)
+            expected_returns.append(next_return)
+        actor_loss, baseline_loss = self.trainer.train(problems, torch.stack(state_history, 0), torch.stack(expected_returns[::-1], 0), torch.stack(prob_history, 0))
         return best_so_far, actor_loss, baseline_loss
 
     # given a batch size and problem size will test the model
@@ -170,17 +162,14 @@ class TSP_improveWrapped:
         state = self.env.getStartingState(n_batch, p_size, self.device)
         best_so_far = self.env.evaluate(problems, state, self.device) #[batch_size]
         exchange = None
-        t = 0
-        T = p_size ** self.T
         self.actor.eval()
-        while t < T:
+        for _ in range(0, p_size ** self.T):
             #pass through model
             _, exchange = self.actor(problems, state, exchange)
             state = self.env.step(state, exchange)
             cost = self.env.evaluate(problems, state, self.device)
             best_so_far = torch.cat((best_so_far[None, :], cost[None, :]), 0).min(0)[0]
             #setup for next round
-            t += 1
         return best_so_far
 
     def save(self):

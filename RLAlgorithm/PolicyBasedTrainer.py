@@ -20,7 +20,7 @@ class ExpMovingAvg:
 
     def train(self, pred_return, true_return):
         self.exp_mvg_avg = pred_return * 0.9 + true_return.mean() * 0.1
-        return self.exp_mvg_avg.mean()
+        return (pred_return - true_return).mean()
 
     def getBaseline(self, problems, states):
         exp_mvg_avg = self.exp_mvg_avg.expand(problems.size(0))
@@ -59,12 +59,12 @@ class Critic:
             self.critic = PntrNetCritic(critic_config).to(device)
         elif critic_config['model'] == 'Transformer':
             self.critic = TransformerCritic(critic_config).to(device)
-        elif critic_config['model'] == 'Improvement':
+        elif critic_config['model'] == 'TSP_improve':
             self.critic = TSP_improveCritic(critic_config).to(device)
-        self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=float(critic_config['critic_lr']))
-        self.critic_scheduler = torch.optim.lr_scheduler.StepLR(self.critic_optimizer, step_size=1, gamma=float(critic_config['critic_lr_gamma']))
+        self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=float(critic_config['learning_rate']))
+        self.critic_scheduler = torch.optim.lr_scheduler.StepLR(self.critic_optimizer, step_size=1, gamma=float(critic_config['learning_rate_gamma']))
         self.critic_mse_loss = nn.MSELoss()
-        self.max_g = float(critic_config['maxGrad'])
+        self.max_g = float(critic_config['max_grad'])
 
     def train(self, pred_return, true_return):
         # train critic
@@ -77,8 +77,6 @@ class Critic:
         return critic_loss
 
     def getBaseline(self, problems, states):
-        print(problems[0:10])
-        print(states[0:10])
         critic_return = self.critic(problems, states.detach())
         return critic_return
 
@@ -107,27 +105,27 @@ class Reinforce:
             print("Invalid baseline type")
 
     def passIntoParameters(self, parameters, optimizer_config):
-            self.actor_param = parameters
-            self.actor_optimizer = optim.Adam(parameters, lr=float(optimizer_config['actor_lr']))
-            self.actor_scheduler = torch.optim.lr_scheduler.StepLR(self.actor_optimizer, step_size=1, gamma=float(optimizer_config['actor_lr_gamma']))
-            self.max_g = float(optimizer_config['max_grad'])
+        self.actor_param = parameters
+        self.actor_optimizer = optim.Adam(parameters, lr=float(optimizer_config['learning_rate']))
+        self.actor_scheduler = torch.optim.lr_scheduler.StepLR(self.actor_optimizer, step_size=1, gamma=float(optimizer_config['learning_rate_gamma']))
+        self.max_g = float(optimizer_config['max_grad'])
 
     # problems: [n_batch, n_nodes, 4]
     # states: [steps, n_batch, n_nodes]
     # return, probabilities: [steps, n_batch]
     def train(self, problems, states, returns, probabilities):
         steps, n_batch, n_nodes = states.size()
-        assert (probabilities.size() == returns.size()), "return size {0} does not match probabilities size {1}"\
-            .format(returns.size(), probabilities.size())
         # get baseline
-        baseline = self.baseline.getBaseline(problems.unsqueeze(dim=1).repeat(1, steps, 1, 1).view(-1, n_nodes, 4), states.view(-1, n_nodes)).view(steps, n_batch)
+        problems = problems.unsqueeze(dim=1).repeat(1, steps, 1, 1).reshape(-1, n_nodes, 4)
+        states = states.transpose(0, 1).reshape(-1, n_nodes)
+        baseline = self.baseline.getBaseline(problems, states).view(n_batch, steps).transpose(0, 1)
         # calculate actor loss
         advantage = returns - baseline.detach()
         logprobabilities = torch.log(probabilities)
         reinforce = (advantage * logprobabilities)
         actor_loss = reinforce.mean()
         # train the baseline
-        baseline_loss = self.baseline.train(baseline.view(-1), returns.view(-1))
+        baseline_loss = self.baseline.train(baseline.reshape(-1), returns.reshape(-1))
         # train the actor - update the weights using optimiser
         self.actor_optimizer.zero_grad()
         actor_loss.backward() # calculate gradient backpropagation

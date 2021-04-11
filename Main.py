@@ -1,9 +1,11 @@
+import os
+import sys
 import csv
 import datetime
 import configparser
-import os
 import numpy as np
 from pathlib import Path
+import tracemalloc
 
 import torch
 from torch.utils.tensorboard import SummaryWriter
@@ -57,16 +59,20 @@ class TrainTest:
             avgR = R.mean().item()
             avgRoutedR = sum(R_routed).item()/len(R_routed) if len(R_routed) > 0 else 10000
             percRouted = len(R_routed)*100/self.n_batch_train_size
+            if torch.is_tensor(baseline_loss):
+                baseline_loss = baseline_loss.item()
+            if torch.is_tensor(actor_loss):
+                baseline_loss = actor_loss.item()
             if self.csv is not None:
                 with open(self.csv['train'], 'a') as file:
-                    csv.writer(file).writerow([i, avgRoutedR, avgR, percRouted, actor_loss.item(), baseline_loss.item()])
+                    csv.writer(file).writerow([i, avgRoutedR, avgR, percRouted, actor_loss, baseline_loss])
             if self.tensor is not None:
                 t_board = SummaryWriter(self.tensor)
                 t_board.add_scalar('Train/AvgRoutedR', avgRoutedR, global_step = i)
                 t_board.add_scalar('Train/AvgR', avgR, global_step = i)
                 t_board.add_scalar('Train/AvgRouted%', percRouted, global_step = i)
-                t_board.add_scalar('Train/ActorLoss', actor_loss.item(), global_step = i)
-                t_board.add_scalar('Train/BaselineLoss', baseline_loss.item(), global_step = i)
+                t_board.add_scalar('Train/ActorLoss', actor_loss, global_step = i)
+                t_board.add_scalar('Train/BaselineLoss', baseline_loss, global_step = i)
 
     def test(self, p_size, prob_path=None):
         # run tests
@@ -83,12 +89,24 @@ class TrainTest:
             t_board.add_scalar('Test/AvgRoutedR', avgRoutedR, global_step = self.n_epoch)
             t_board.add_scalar('Test/AvgR', avgR, global_step = self.n_epoch)
             t_board.add_scalar('Test/AvgRouted%', percRouted, global_step = self.n_epoch)
+        print("Epoch: {0}, Prob size: {1}, avgRoutedR: {2}, percRouted: {3}".format(self.n_epoch, p_size, avgRoutedR, percRouted))
 
     def epoch(self, p_size, prob_path=None):
-        self.train(p_size, prob_path)
-        self.test(p_size, prob_path)
-        print("Epoch: {0}, Prob size: {1}, avgRoutedR: {2}, percRouted: {3}".format(self.n_epoch, p_size, avgRoutedR, percRouted))
         self.n_epoch += 1
+        # tracemalloc.start()
+        # snapshot1 = tracemalloc.take_snapshot()
+        self.train(p_size, prob_path)
+        # snapshot2 = tracemalloc.take_snapshot()
+        # top_stats = snapshot2.compare_to(snapshot1, 'lineno')
+        # print("[ Top 10 differences ]")
+        # for stat in top_stats[:10]:
+        #     print(stat)
+        self.test(p_size, prob_path)
+        # snapshot1 = tracemalloc.take_snapshot()
+        # top_stats = snapshot1.compare_to(snapshot2, 'lineno')
+        # print("[ Top 10 differences ]")
+        # for stat in top_stats[:10]:
+            # print(stat)
 
     def save(self):
         model_dict = self.wrapped_actor.save() #save training details
@@ -98,48 +116,42 @@ class TrainTest:
     def load(self):
         checkpoint = torch.load(self.model)
         self.wrapped_actor.load(checkpoint) #load training details
-        self.n_epoch = checkpoint['n_epoch']
+        self.n_epoch = checkpoint['n_epoch']+1
 
-# MODEL
-# search_space = {
-#     "model": "PointerNetwork",
-#     "environment": "Construction",
-#     "data_path": "runs/Test2",
-#     "save_csv": True,
-#     "save_tensor": True,
-#     "n_batch": 10,
-#     "n_batch_train_size": 512,
-#     "n_batch_test_size": 1024,
-#     "baselineType": "ExpMovingAvg",
-#     "embedding": 128,
-#     "hidden": 128,
-#     "glimpse": 1,
-#     "maxGrad": 1,
-#     "actor_lr": 1e-3,
-#     "actor_lr_gamma": 0.96
-#     # "l2": tune.sample_from(lambda _: 2**np.random.randint(2, 9)),
-#     # "lr": tune.loguniform(1e-4, 1e-1),
-#     # "batch_size": tune.choice([2, 4, 8, 16]),
-#     # "data_dir": data_dir
-# }
+def train_thingy(config):
+    #TRAINING TESTING DETAILS
+    agent = TrainTest(config=config)
+    n_epochs = 10
+    prob_size = 5
+    print("Number of epochs: {0}".format(n_epochs))
+    for epoch in range(0, n_epochs):
+        agent.epoch(prob_size)#, path=file)
+        agent.save()
 
-name = "ConstructionPointer"
-path = 'runs/{0}.cfg'.format(name)
-config = configparser.ConfigParser()
-config.read(path)
-print("Reading config from path", path)
-config = dict(config['config'])
+def test_generalisation(config):
+    agent = TrainTest(config=config)
+    # generalisation
+    for prob_size in [3, 4, 5, 6, 8]:
+        agent.load()
+        agent.test(prob_size)
 
-#TRAINING TESTING DETAILS
-agent = TrainTest(config=config)
-n_epochs = 10
-prob_size = 5
-print("Number of epochs: {0}".format(n_epochs))
-for epoch in range(1, n_epochs):
-    agent.epoch(prob_size)#, path=file)
-    agent.save()
+def loadConfigFile(path):
+    config = configparser.ConfigParser()
+    config.read(path)
+    print("Reading config from path", path)
+    config = dict(config['config'])
+    return config
 
-# generalisation
-# for prob_size in [3, 4, 5, 6, 8]:
-#     agent.load(10)
-#     agent.test(1000, prob_size, "console")
+
+try:
+      opts, args = getopt.getopt(argv,"f",[])
+except getopt.GetoptError:
+  print 'test.py -f <configfile>'
+  sys.exit(2)
+
+for opt, arg in opts:
+    if opt == '-f':
+        path = arg
+# path = "runs/ImprovementTransformer.cfg"
+config = loadConfigFile(path)
+train_thingy(config)
