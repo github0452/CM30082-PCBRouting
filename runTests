@@ -35,5 +35,5 @@ baseline_type = ExpMovingAvg" > $config_file
 		echo "$key = $element" >> $config_file
 	done
 	# run code
-	tsp python3 python_script.py -f config_file
+	tsp python3 Main.py -f config_file
 done
