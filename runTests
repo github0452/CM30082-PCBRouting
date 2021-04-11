@@ -25,7 +25,7 @@ for i in $( eval echo {1..$iteration} ); do
 	echo "baseline_type = ExpMovingAvg"
 	for key in "${!search_space[@]}"; do
 		# select random element
-		size=${#search_space[$key][@]}
+		size=${#${search_space[$key]}[@]}
 		index=$(($RANDOM % $size))
 		element=search_space[$key][$index]
 		# add to file
