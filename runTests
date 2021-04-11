@@ -12,7 +12,17 @@ search_space['learning_rate_gamma']="1 0.98 0.96"
 
 iteration=1
 for i in $( eval echo {1..$iteration} ); do
+	config_file="config_file${i}"
 	echo "[general]" > config_file
+	echo "model=PointerNetwork"
+	echo "environment = Construction"
+	echo "data_path = runs/config${i}"
+	echo "save_csv = True"
+	echo "save_tensor = False"
+	echo "n_batch = 10"
+	echo "n_batch_train_size = 512"
+	echo "n_batch_test_size = 1024"
+	echo "baseline_type = ExpMovingAvg"
 	for key in "${!search_space[@]}"; do
 		# select random element
 		size=${#search_space[$key][@]}
