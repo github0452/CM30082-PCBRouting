@@ -2,6 +2,7 @@ import os
 import sys
 import csv
 import datetime
+import configparser
 import numpy as np
 from pathlib import Path
 import tracemalloc
@@ -135,14 +136,13 @@ def test_generalisation(config):
         agent.test(prob_size)
 
 def loadConfigFile(path):
-    f = open(path, "r")
-    line = f.readline()
-    while line != '':
-        print(line, type(line))
-        #do something with line
-        line = f.readline()
-    f.close()
-
+    # f = open(path, "r")
+    # line = f.readline()
+    # while line != '':
+    #     print()
+    #     #do something with line
+    #     line = f.readline()
+    # f.close()
     config = configparser.ConfigParser()
     config.read(path)
     print("Reading config from path", path)
