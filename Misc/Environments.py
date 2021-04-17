@@ -2,6 +2,8 @@ import sys
 import os
 print("Env path", sys.path)
 print(os.path.isfile("./Misc/copt.pyd"))
+import pickle
+
 
 import Misc.copt as copt
 # import copt
@@ -9,8 +11,6 @@ import Misc.copt as copt
 import torch
 import random
 import numpy as np
-import pickle
-
 class Environment:
     def __init__(self):
         pass
