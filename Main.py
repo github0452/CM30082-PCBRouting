@@ -8,6 +8,8 @@ import numpy as np
 from pathlib import Path
 import tracemalloc
 
+print("Env path", sys.path)
+
 import torch
 from torch.utils.tensorboard import SummaryWriter
 
