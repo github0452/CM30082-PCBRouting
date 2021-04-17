@@ -3,7 +3,7 @@ import sys
 import csv
 import time
 import datetime
-import configparser
+# import configparser
 import numpy as np
 from pathlib import Path
 import tracemalloc
@@ -137,37 +137,39 @@ def test_generalisation(config):
         agent.load()
         agent.test(prob_size)
 
-def loadConfigFile(path):
-    # f = open(path, "r")
-    # line = f.readline()
-    # while line != '':
-    #     print()
-    #     #do something with line
-    #     line = f.readline()
-    # f.close()
-    config = configparser.ConfigParser()
-    config.read(path)
-    print("Reading config from path", path)
-    config = dict(config['config'])
-    return config
+# def loadConfigFile(path):
+#     # f = open(path, "r")
+#     # line = f.readline()
+#     # while line != '':
+#     #     print()
+#     #     #do something with line
+#     #     line = f.readline()
+#     # f.close()
+#     config = configparser.ConfigParser()
+#     config.read(path)
+#     print("Reading config from path", path)
+#     config = dict(config['config'])
+#     return config
 
+config = {'model': 'TSP_improve', 'environment': 'Improvement', 'data_path': 'runs/ImprTransformerCritic2', 'save_csv': 'True', 'save_tensor': 'True', 'n_batch': '10', 'n_batch_train_size': '512', 'n_batch_test_size': '5120', 'baseline_type': 'Critic', 'n_layers': '2', 'n_head': '1', 'dim_model': '128', 'dim_hidden': '64', 'dim_v': '32', 'dim_k': '32', 'max_grad': '2', 'learning_rate': '1e-4', 'learning_rate_gamma': '1', 't': '1'}
 # path_list = ["runs/ConstructionPointer.cfg"]
 # path_list = ["runs/ConstructionTransformer.cfg"]
-path_list = ["runs/ImprovementTransformer.cfg"]
+# path_list = ["runs/ImprovementTransformer.cfg"]
 # path = "runs/ImprovementTransformer.cfg"
 # for i in stuff:#range(17, 21):
     # path = "config_file{0}".format(i)
-for path in path_list:
-    config = loadConfigFile(path)
-    agent = TrainTest(config=config)
-    # agent.train(5)
-    # agent.load()
-    # agent.test(5, sample_count=1, prob_path="datasets/n5b5120.pkg")
-    # agent.test(5, sample_count=5, prob_path="datasets/n5b5120.pkg")
-    n_epochs = 10
-    prob_size = 5
-    print("Number of epochs: {0}".format(n_epochs))
-    # for epoch in range(0, n_epochs):
-    for epoch in range(0, n_epochs):
-        agent.epoch(prob_size)#, path=file)
-        agent.save()
+# for path in path_list:
+#     # config = loadConfigFile(path)
+#     print(config)
+agent = TrainTest(config=config)
+# agent.train(5)
+# agent.load()
+# agent.test(5, sample_count=1, prob_path="datasets/n5b5120.pkg")
+# agent.test(5, sample_count=5, prob_path="datasets/n5b5120.pkg")
+n_epochs = 10
+prob_size = 5
+print("Number of epochs: {0}".format(n_epochs))
+# for epoch in range(0, n_epochs):
+for epoch in range(0, n_epochs):
+    agent.epoch(prob_size)#, path=file)
+    agent.save()
