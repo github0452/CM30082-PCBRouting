@@ -1,3 +1,4 @@
+import sys
 print("Env path", sys.path)
 
 import Misc.copt as copt
