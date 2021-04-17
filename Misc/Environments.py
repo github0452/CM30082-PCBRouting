@@ -1,5 +1,6 @@
 import sys
 print("Env path", sys.path)
+print(os.path.isfile("./Misc/copt.pyd"))
 
 import Misc.copt as copt
 # import copt
