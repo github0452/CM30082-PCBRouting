@@ -1,3 +1,5 @@
+print("Env path", sys.path)
+
 import Misc.copt as copt
 # import copt
 # import Baselines
