@@ -51,7 +51,7 @@ class PtrNet(nn.Module):
     def __init__(self, model_config):
         super().__init__() #initialise nn.Module
         # defining layers and intialising them
-        dim_embedding = int(model_config['embedding'])
+        dim_embedding = int(model_config['hidden'])
         dim_model = int(model_config['hidden'])
         n_glimpse = int(model_config['glimpse'])
         self.L_embedder = GraphEmbedding(dim_embedding)
@@ -96,7 +96,7 @@ class PtrNet(nn.Module):
 class PntrNetCritic(nn.Module):
     def __init__(self, model_config):
         super().__init__() #initialise nn.Module
-        dim_embedding = int(model_config['embedding'])
+        dim_embedding = int(model_config['hidden'])
         dim_model = int(model_config['hidden'])
         n_glimpse = int(model_config['glimpse'])
         n_processing = int(model_config['processing'])
@@ -136,27 +136,38 @@ class PtrNetWrapped: #wrapper for model
 
     # given a problem size and batch size will train the model
     def train_batch(self, n_batch, p_size, path=None):
-        problems = self.env.gen(n_batch, p_size, self.device) if (path is None) else self.env.load(path, n_batch, self.device) # generate or load problems
+        problems = self.env.gen(n_batch, p_size) if (path is None) else self.env.load(path, n_batch) # generate or load problems
+        problems = torch.tensor(problems, device=self.device, dtype=torch.float)
         # run through the model
         self.actor.train()
-        # with torch.autograd.profiler.profile(use_cuda=True, profile_memory=True, with_stack=True) as prof:
-        action_probs_list, action_list = self.actor(problems, sampling=True) #action_probs_list (n_node x [n_batch])
-        # print(prof.key_averages().table(sort_by="self_cpu_time_total"))
+        with torch.autograd.profiler.profile(use_cuda=True, profile_memory=True, with_stack=True) as prof:
+            action_probs_list, action_list = self.actor(problems, sampling=True) #action_probs_list (n_node x [n_batch])
+        print("forward", prof.key_averages().table(sort_by="self_cpu_time_total"))
         # calculate reward and probability
-        reward = self.env.evaluate(problems, action_list, self.device)
+        reward = torch.tensor(self.env.evaluate(problems, action_list), device=self.device, dtype=torch.float)
+        # with torch.autograd.profiler.profile(use_cuda=True, profile_memory=True, with_stack=True) as prof:
         probs = action_probs_list.prod(dim=1)
         # use this to train
         actor_loss, baseline_loss = self.trainer.train(problems, action_list.unsqueeze(dim=0), reward.unsqueeze(dim=0), probs.unsqueeze(dim=0))
+        # print(prof.key_averages().table(sort_by="self_cpu_time_total"))
         return reward, actor_loss, baseline_loss
 
     # given a batch size and problem size will test the model
-    def test(self, n_batch, p_size, path=None):
-        problems = self.env.gen(n_batch, p_size, self.device) if (path is None) else self.env.load(path, n_batch, self.device) # generate or load problems
+    def test(self, n_batch, p_size, path=None, sample_count=1):
+        problems = self.env.gen(n_batch, p_size) if (path is None) else self.env.load(path, n_batch) # generate or load problems
+        problems = torch.tensor(problems, device=self.device, dtype=torch.float)
         # run through model
+        best_so_far = None
         self.actor.eval()
-        action_probs_list, action_list = self.actor(problems, sampling=True)
-        reward = self.env.evaluate(problems, action_list, self.device)
-        return reward
+        for _ in range(sample_count):
+            action_probs_list, action_list = self.actor(problems, sampling=True)
+            reward = torch.tensor(self.env.evaluate(problems, action_list), device=self.device, dtype=torch.float)
+            if best_so_far is None:
+                best_so_far = reward
+            else:
+                best_so_far = torch.cat((best_so_far[None, :], reward[None, :]), 0).min(0)[0]
+            print(best_so_far[0:10])
+        return best_so_far
 
     def save(self):
         model_dict = {}

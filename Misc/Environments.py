@@ -10,7 +10,7 @@ class Environment:
     def __init__(self):
         pass
 
-    def gen(self, list_size, prob_size, device, routableOnly=True):
+    def gen(self, list_size, prob_size, routableOnly=True):
         problems = []
         invalid = 0
         noSol = 0
@@ -30,18 +30,16 @@ class Environment:
         print("Invalid problem: {0}, No solution problem: {1}".format(invalid, noSol))
         # randomly shuffling the data to prevent any bias, e.g. if testing later with different problem sizes
         random.shuffle(problems)
-        if device == "cpu":
-            problems = torch.FloatTensor(problems)
-        else:
-            problems = torch.cuda.FloatTensor(problems)
         return problems
 
     # problems: torch.Size([100, 5, 4]), orders [5, 100]
-    def evaluate(self, problems, orders, device):
+    def evaluate(self, problems, orders):
         #convert everything to the right format
         n_node = problems.size(1)
-        orders = orders.tolist()
-        problems = [[tuple(element) for element in problem] for problem in problems.tolist()]
+        if torch.is_tensor(orders):
+            orders = orders.tolist()
+        if torch.is_tensor(problems):
+            problems = [[tuple(element) for element in problem] for problem in problems.tolist()]
         reward = []
         i = 0
         for problem,order in zip(problems, orders):
@@ -53,17 +51,18 @@ class Environment:
                     reward.append(eval["measure"]/n_node)
             else:
                 reward.append(0)
-        reward = torch.as_tensor(reward, device=device)
+        # reward = torch.as_tensor(reward, device=device)
         return reward
 
-    def load(self, path, batch_size, device):
+    def load(self, path, batch_size=None):
         problems = pickle.load( open( path, "rb" ))
-        problem_count = problems.size(0)
-        if problem_count < batch_size: #repeat if needed
-            multiply = -(-batch_size // problem_count)
-            problems = problems.repeat(multiply, 1, 1)
-        problems = problems[:batch_size] #trim
-        return problems.to(device)
+        # if batch_size is not None:
+        #     problem_count = len(problems)
+        #     if problem_count < batch_size: #repeat if needed
+        #         multiply = -(-batch_size // problem_count)
+        #         problems = problems.repeat(multiply, 1, 1)
+        #     problems = problems[:batch_size] #trim
+        return problems
 
 class Construction(Environment):
     def initialState(self, problems):
@@ -110,21 +109,23 @@ if __name__ == "__main__":
     batchSize = 1
     seqLen = 3
     env = Construction()
+    problems = env.gen(5120, 5)
+    pickle.dump( problems, open( "n5b5120.pkg", "wb" ) )
 
-    array = torch.tensor([[0, 1, 2, 3], [0, 1, 2, 3]])
-    valuesToSwap = torch.tensor([[3, 2], [0, 4]])
-
-    step_np = valuesToSwap.clone().cpu().numpy()
-    state_np = array.clone().cpu().numpy()
-    state_np = np.insert(state_np, 0, -1, axis=1)
-    for action, state_row in zip(step_np, state_np):
-        a_1 = np.where(state_row == action[0])[0][0]
-        state_row[0:a_1-1] = state_row[1:a_1]
-        state_row[a_1-1] = action[1]
-    # for i in range(array.size(dim=0)):
+    # array = torch.tensor([[0, 1, 2, 3], [0, 1, 2, 3]])
+    # valuesToSwap = torch.tensor([[3, 2], [0, 4]])
     #
-    #     print(np.insert(state_np, [i, a_1], step_np[i][1]))
-    print(torch.tensor(state_np))
+    # step_np = valuesToSwap.clone().cpu().numpy()
+    # state_np = array.clone().cpu().numpy()
+    # state_np = np.insert(state_np, 0, -1, axis=1)
+    # for action, state_row in zip(step_np, state_np):
+    #     a_1 = np.where(state_row == action[0])[0][0]
+    #     state_row[0:a_1-1] = state_row[1:a_1]
+    #     state_row[a_1-1] = action[1]
+    # # for i in range(array.size(dim=0)):
+    # #
+    # #     print(np.insert(state_np, [i, a_1], step_np[i][1]))
+    # print(torch.tensor(state_np))
     #experimenting with steps
     # problems = torch.Tensor(env.genProblems(batchSize, seqLen))
     # state = None

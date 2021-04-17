@@ -1,6 +1,7 @@
 import os
 import sys
 import csv
+import time
 import datetime
 import configparser
 import numpy as np
@@ -28,10 +29,12 @@ class TrainTest:
         if bool(config['save_csv']):
             self.csv = {'train': '{0}/train.csv'.format(data_path),
                 'test': '{0}/test.csv'.format(data_path)}
-            with open(self.csv['train'], 'w') as file:
-                csv.writer(file).writerow(["step", "AvgRoutedR", "AvgR", "AvgRouted%", "ActorLoss", "BaselineLoss"])
-            with open(self.csv['test'], 'w') as file:
-                csv.writer(file).writerow(["step", "AvgRoutedR", "AvgR", "AvgRouted%"])
+            if not os.path.isfile(self.csv['train']):
+                with open(self.csv['train'], 'w') as file:
+                    csv.writer(file).writerow(["step", "AvgRoutedR", "AvgR", "AvgRouted%", "ActorLoss", "BaselineLoss"])
+            if not os.path.isfile(self.csv['test']):
+                with open(self.csv['test'], 'w') as file:
+                    csv.writer(file).writerow(["step", "AvgRoutedR", "AvgR", "AvgRouted%"])
         if bool(config['save_tensor']):
             self.tensor = '{0}/tensor'.format(data_path)
         self.model = '{0}/checkpoint'.format(data_path)
@@ -74,9 +77,13 @@ class TrainTest:
                 t_board.add_scalar('Train/ActorLoss', actor_loss, global_step = i)
                 t_board.add_scalar('Train/BaselineLoss', baseline_loss, global_step = i)
 
-    def test(self, p_size, prob_path=None):
+    def test(self, p_size, prob_path=None, sample_count=1):
         # run tests
-        R = self.wrapped_actor.test(self.n_batch_test_size, p_size, path=prob_path)
+        torch.cuda.synchronize()
+        t0 = time.time()
+        R = self.wrapped_actor.test(self.n_batch_test_size, p_size, path=prob_path, sample_count=sample_count)
+        torch.cuda.synchronize()
+        timeTaken = time.time()-t0
         R_routed = [x for x in R if (x != 10000)]
         avgR = R.mean().item()
         avgRoutedR = sum(R_routed).item()/len(R_routed) if len(R_routed) > 0 else 10000
@@ -89,7 +96,7 @@ class TrainTest:
             t_board.add_scalar('Test/AvgRoutedR', avgRoutedR, global_step = self.n_epoch)
             t_board.add_scalar('Test/AvgR', avgR, global_step = self.n_epoch)
             t_board.add_scalar('Test/AvgRouted%', percRouted, global_step = self.n_epoch)
-        print("Epoch: {0}, Prob size: {1}, avgRoutedR: {2}, percRouted: {3}".format(self.n_epoch, p_size, avgRoutedR, percRouted))
+        print("Epoch: {0}, Prob size: {1}, avgRoutedR: {2}, percRouted: {3}, time: {4}".format(self.n_epoch, p_size, avgRoutedR, percRouted, timeTaken))
 
     def epoch(self, p_size, prob_path=None):
         self.n_epoch += 1
@@ -102,11 +109,6 @@ class TrainTest:
         # for stat in top_stats[:10]:
         #     print(stat)
         self.test(p_size, prob_path)
-        # snapshot1 = tracemalloc.take_snapshot()
-        # top_stats = snapshot1.compare_to(snapshot2, 'lineno')
-        # print("[ Top 10 differences ]")
-        # for stat in top_stats[:10]:
-            # print(stat)
 
     def save(self):
         model_dict = self.wrapped_actor.save() #save training details
@@ -116,12 +118,12 @@ class TrainTest:
     def load(self):
         checkpoint = torch.load(self.model)
         self.wrapped_actor.load(checkpoint) #load training details
-        self.n_epoch = checkpoint['n_epoch']+1
+        self.n_epoch = checkpoint['n_epoch']
 
 def train_thingy(config):
     #TRAINING TESTING DETAILS
     agent = TrainTest(config=config)
-    n_epochs = 10
+    n_epochs = 5
     prob_size = 5
     print("Number of epochs: {0}".format(n_epochs))
     for epoch in range(0, n_epochs):
@@ -149,9 +151,23 @@ def loadConfigFile(path):
     config = dict(config['config'])
     return config
 
-
-path = sys.argv[1]
-print(path)
+# path_list = ["runs/ConstructionPointer.cfg"]
+# path_list = ["runs/ConstructionTransformer.cfg"]
+path_list = ["runs/ImprovementTransformer.cfg"]
 # path = "runs/ImprovementTransformer.cfg"
-config = loadConfigFile(path)
-train_thingy(config)
+# for i in stuff:#range(17, 21):
+    # path = "config_file{0}".format(i)
+for path in path_list:
+    config = loadConfigFile(path)
+    agent = TrainTest(config=config)
+    # agent.train(5)
+    # agent.load()
+    # agent.test(5, sample_count=1, prob_path="datasets/n5b5120.pkg")
+    # agent.test(5, sample_count=5, prob_path="datasets/n5b5120.pkg")
+    n_epochs = 10
+    prob_size = 5
+    print("Number of epochs: {0}".format(n_epochs))
+    # for epoch in range(0, n_epochs):
+    for epoch in range(0, n_epochs):
+        agent.epoch(prob_size)#, path=file)
+        agent.save()

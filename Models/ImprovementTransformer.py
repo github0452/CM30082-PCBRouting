@@ -118,11 +118,11 @@ class TSP_improveWrapped:
     # given a problem size and batch size will train the model
     def train_batch(self, n_batch, p_size, path=None):
         # with torch.autograd.profiler.profile(use_cuda=True, profile_memory=True, with_stack=True) as prof:
-        problems = self.env.gen(n_batch, p_size, self.device) if (path is None) else self.env.load(path, n_batch, self.device) # generate or load problems
+        problems = self.env.gen(n_batch, p_size) if (path is None) else self.env.load(path, n_batch) # generate or load problems
+        problems = torch.tensor(problems, device=self.device, dtype=torch.float)
         # setup inital parameters
         state = self.env.getStartingState(n_batch, p_size, self.device)
-        best_so_far = self.env.evaluate(problems, state, self.device)
-        initial_result = best_so_far.clone()
+        best_so_far = torch.tensor(self.env.evaluate(problems, state), device=self.device, dtype=torch.float)
         # print(prof.key_averages().table(sort_by="self_cpu_time_total"))
         exchange = None
         # tracking stuff for information
@@ -132,23 +132,22 @@ class TSP_improveWrapped:
         # run through the model
         self.actor.train()
         for _ in range(p_size ** self.T):
+            # with torch.autograd.profiler.profile(use_cuda=True, profile_memory=True, with_stack=True) as prof:
             probability, exchange = self.actor(problems, state, exchange)
-            state = self.env.step(state, exchange)
-            # calculate reward
-            cost = self.env.evaluate(problems, state, self.device)
+            # print("forward", prof.key_averages().table(sort_by="self_cpu_time_total"))
+            cost = torch.tensor(self.env.evaluate(problems, state), device=self.device, dtype=torch.float)
             # reward = cost - best_so_far is negatie, otherwise reward = 0
             best_for_now = torch.cat((best_so_far[None, :], cost[None, :]), 0).min(0)[0]
-            #save things
-            reward_history.append(best_for_now - best_so_far)
+            state = self.env.step(state, exchange)
             state_history.append(state)
             prob_history.append(probability)
-            #update for next iteration
+            reward_history.append(best_for_now - best_so_far)
             best_so_far = best_for_now
         # train -  Get discounted R
         expected_returns = []
         reward_history = reward_history[::-1]
-        next_return = 0
-        # next_return = self.trainer.useBaseline(problems, state).squeeze(-1)
+        # next_return = 0
+        next_return = self.trainer.useBaseline(problems, state).squeeze(-1)
         for r in reward_history:
             next_return = next_return * 0.9 + r
             expected_returns.append(next_return)
@@ -156,18 +155,19 @@ class TSP_improveWrapped:
         return best_so_far, actor_loss, baseline_loss
 
     # given a batch size and problem size will test the model
-    def test(self, n_batch, p_size, path=None):
-        problems = self.env.gen(n_batch, p_size, self.device) if (path is None) else self.env.load(path, n_batch, self.device) # generate or load problems
+    def test(self, n_batch, p_size, path=None, sample_count=None):
+        problems = self.env.gen(n_batch, p_size) if (path is None) else self.env.load(path, n_batch) # generate or load problems
+        problems = torch.tensor(problems, device=self.device, dtype=torch.float)
         # setup inital parameters
         state = self.env.getStartingState(n_batch, p_size, self.device)
-        best_so_far = self.env.evaluate(problems, state, self.device) #[batch_size]
+        best_so_far = torch.tensor(self.env.evaluate(problems, state), device=self.device, dtype=torch.float) #[batch_size]
         exchange = None
         self.actor.eval()
         for _ in range(0, p_size ** self.T):
             #pass through model
             _, exchange = self.actor(problems, state, exchange)
             state = self.env.step(state, exchange)
-            cost = self.env.evaluate(problems, state, self.device)
+            cost = torch.tensor(self.env.evaluate(problems, state), device=self.device, dtype=torch.float)
             best_so_far = torch.cat((best_so_far[None, :], cost[None, :]), 0).min(0)[0]
             #setup for next round
         return best_so_far
