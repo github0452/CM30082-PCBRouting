@@ -116,29 +116,30 @@ class TrainTest:
         else:
             print('weights not found for', self.model_name)
 
-config = {
-    'model': 'TSP_improve',
-    'environment': 'Improvement',
-    'data_path': 'runs/ImprTransformerCritic2',
-    'save_csv': False,
-    'save_tensor': False,
-    'n_batch': '10',
-    'n_batch_train_size': '512',
-    'n_batch_test_size': '2048',
-    'baseline_type': 'Critic',
-    'n_layers': '2',
-    'n_head': '1',
-    'dim_model': '128',
-    'dim_hidden': '64',
-    'dim_v': '32',
-    'dim_k': '32',
-    'max_grad': '2',
-    'learning_rate': '1e-4',
-    'learning_rate_gamma': '1',
-    't': '1'
-}
-print(sys.argv)
-agent = TrainTest(config=config)
+# config = {
+#     'model': 'TSP_improve',
+#     'environment': 'Improvement',
+#     'data_path': 'runs/ImprTransformerCritic2',
+#     'save_csv': False,
+#     'save_tensor': False,
+#     'n_batch': '10',
+#     'n_batch_train_size': '512',
+#     'n_batch_test_size': '2048',
+#     'baseline_type': 'Critic',
+#     'n_layers': '2',
+#     'n_head': '1',
+#     'dim_model': '128',
+#     'dim_hidden': '64',
+#     'dim_v': '32',
+#     'dim_k': '32',
+#     'max_grad': '2',
+#     'learning_rate': '1e-4',
+#     'learning_rate_gamma': '1',
+#     't': '1'
+# }
+if len(sys.argv) >= 2:
+    config_location = sys.argv[1]
+agent = TrainTest(config=config_location)
 N_EPOCHS = 5
 N_NODES = 5
 print("Number of epochs: {0}".format(N_EPOCHS))
