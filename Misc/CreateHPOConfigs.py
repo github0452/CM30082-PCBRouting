@@ -60,9 +60,7 @@ for model_name, env_name, model_config in models:
         for parameter, options in model_config.items():
             config[parameter] = random.choice(options)
         # randomly select parameters
-        file_name = "{0}/configFile-{1}-{2}".format(DATA, model_name, i)
+        file_name = "{0}/configFiles/{1}-{2}".format(DATA, model_name, i)
         print(file_name)
         with open(file_name, 'w') as outfile:
             json.dump(config, outfile, indent=4)
-        with open(file_name) as json_file:
-            print(json.load(json_file))

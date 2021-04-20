@@ -139,7 +139,9 @@ class TrainTest:
 # }
 if len(sys.argv) >= 2:
     config_location = sys.argv[1]
-agent = TrainTest(config=config_location)
+with open(config_location) as json_file:
+    config = json.load(json_file)
+agent = TrainTest(config=config)
 N_EPOCHS = 5
 N_NODES = 5
 print("Number of epochs: {0}".format(N_EPOCHS))
