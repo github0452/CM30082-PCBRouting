@@ -80,6 +80,8 @@ class TrainTest:
                 t_board.add_scalar('Train/AvgRouted%', percRouted, global_step = i)
                 t_board.add_scalar('Train/ActorLoss', actor_loss, global_step = i)
                 t_board.add_scalar('Train/BaselineLoss', baseline_loss, global_step = i)
+        print("Epoch: {0}, Prob size: {1}, avgRoutedR: {2}, percRouted: {3}".format(self.n_epoch, p_size, avgRoutedR, percRouted))
+        self.n_epoch += 1
 
     def test(self, p_size, prob_path=None, sample_count=1):
         # run tests
@@ -98,17 +100,16 @@ class TrainTest:
             t_board.add_scalar('Test/AvgRouted%', percRouted, global_step = self.n_epoch)
         print("Epoch: {0}, Prob size: {1}, avgRoutedR: {2}, percRouted: {3}".format(self.n_epoch, p_size, avgRoutedR, percRouted))
 
-    def epoch(self, p_size, prob_path=None):
-        self.n_epoch += 1
-        # tracemalloc.start()
-        # snapshot1 = tracemalloc.take_snapshot()
-        self.train(p_size, prob_path)
-        # snapshot2 = tracemalloc.take_snapshot()
-        # top_stats = snapshot2.compare_to(snapshot1, 'lineno')
-        # print("[ Top 10 differences ]")
-        # for stat in top_stats[:10]:
-        #     print(stat)
-        self.test(p_size, prob_path)
+    # def epoch(self, p_size, prob_path=None):
+    #     # tracemalloc.start()
+    #     # snapshot1 = tracemalloc.take_snapshot()
+    #     self.train(p_size, prob_path)
+    #     # snapshot2 = tracemalloc.take_snapshot()
+    #     # top_stats = snapshot2.compare_to(snapshot1, 'lineno')
+    #     # print("[ Top 10 differences ]")
+    #     # for stat in top_stats[:10]:
+    #     #     print(stat)
+    #     # self.test(p_size, prob_path)
 
     def save(self):
         model_dict = self.wrapped_actor.save() #save training details

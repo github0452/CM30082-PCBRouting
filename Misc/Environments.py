@@ -29,7 +29,7 @@ class Environment:
                     noSol += 1
             else:
                 invalid += 1
-        print("Invalid problem: {0}, No solution problem: {1}".format(invalid, noSol))
+        # print("Invalid problem: {0}, No solution problem: {1}".format(invalid, noSol))
         # randomly shuffling the data to prevent any bias, e.g. if testing later with different problem sizes
         random.shuffle(problems)
         return problems
