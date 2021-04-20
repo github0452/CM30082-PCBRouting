@@ -42,5 +42,5 @@
 # done
 
 for filename in ./runs/configFiles/PointerNetwork-*; do
-	python3 Main.py $filename
+	tsp python3 Main.py $filename
 done
