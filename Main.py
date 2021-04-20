@@ -40,7 +40,7 @@ class TrainTest:
                     csv.writer(file).writerow(["step", "AvgRoutedR", "AvgR", "AvgRouted%"])
         if bool(config['save_tensor']):
             self.tensor = '{0}/tensor'.format(data_path)
-        self.model = '{0}/checkpoint'.format(data_path)
+        self.model_name = '{0}/checkpoint'.format(data_path)
         # setup testing and training stuff
         self.n_epoch = 0
         self.n_batch = int(config['n_batch'])
@@ -54,6 +54,7 @@ class TrainTest:
         if model_type == 'PointerNetwork': self.wrapped_actor = PtrNetWrapped(env, trainer, device, config)
         elif model_type == 'Transformer': self.wrapped_actor = TransformerWrapped(env, trainer, device, config)
         elif model_type == 'TSP_improve': self.wrapped_actor = TSP_improveWrapped(env, trainer, device, config)
+        self.load()
 
     def train(self, p_size, prob_path=None):
         # loop through batches
@@ -112,12 +113,16 @@ class TrainTest:
     def save(self):
         model_dict = self.wrapped_actor.save() #save training details
         model_dict['n_epoch'] = self.n_epoch
-        torch.save(model_dict, self.model)
+        torch.save(model_dict, self.model_name)
 
     def load(self):
-        checkpoint = torch.load(self.model)
-        self.wrapped_actor.load(checkpoint) #load training details
-        self.n_epoch = checkpoint['n_epoch']
+        if os.path.exists(self.model_name):
+            checkpoint = torch.load(self.model_name)
+            self.wrapped_actor.load(checkpoint) #load training details
+            self.n_epoch = checkpoint['n_epoch']
+            print('Loaded with', self.n_epoch, 'epochs.')
+        else:
+            print('weights not found for', self.model_name)
 
 def train_thingy(config):
     #TRAINING TESTING DETAILS
