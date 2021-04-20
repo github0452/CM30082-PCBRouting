@@ -50,6 +50,8 @@ OPTIONS = 32
 for model_name, env_name, model_config in models:
     folder = "{0}/{1}".format(DATA, model_name)
     Path(folder).mkdir(parents=True, exist_ok=True)
+    Path("{0}/configFiles").mkdir(parents=True, exist_ok=True)
+
     for i in range(OPTIONS):
         config = {
             'model': model_name,
@@ -61,6 +63,5 @@ for model_name, env_name, model_config in models:
             config[parameter] = random.choice(options)
         # randomly select parameters
         file_name = "{0}/configFiles/{1}-{2}".format(DATA, model_name, i)
-        print(file_name)
         with open(file_name, 'w') as outfile:
             json.dump(config, outfile, indent=4)
