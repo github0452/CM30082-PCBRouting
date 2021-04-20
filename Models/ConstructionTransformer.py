@@ -14,9 +14,9 @@ class Transformer(nn.Module):
         n_layers = int(model_config['n_layers'])
         n_head = int(model_config['n_head'])
         dim_model = int(model_config['dim_model'])
-        dim_hidden = int(model_config['dim_hidden'])
+        dim_hidden = dim_model
         dim_k = int(model_config['dim_k'])
-        dim_v = int(model_config['dim_v'])
+        dim_v = dim_k
         self.L_embedder = GraphEmbedding(dim_model, usePosEncoding=False)
         self.L_encoder = nn.Sequential(*(TransformerEncoderL(n_head, dim_model, dim_hidden, dim_k, dim_v, momentum=0.3) for _ in range(n_layers)))
         self.L_graph_context = nn.Linear(dim_model, dim_model, bias=False)
