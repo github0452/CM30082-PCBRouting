@@ -82,11 +82,7 @@ class TrainTest:
 
     def test(self, p_size, prob_path=None, sample_count=1):
         # run tests
-        torch.cuda.synchronize()
-        t0 = time.time()
         R = self.wrapped_actor.test(self.n_batch_test_size, p_size, path=prob_path, sample_count=sample_count)
-        torch.cuda.synchronize()
-        timeTaken = time.time()-t0
         R_routed = [x for x in R if (x != 10000)]
         avgR = R.mean().item()
         avgRoutedR = sum(R_routed).item()/len(R_routed) if len(R_routed) > 0 else 10000
@@ -99,7 +95,7 @@ class TrainTest:
             t_board.add_scalar('Test/AvgRoutedR', avgRoutedR, global_step = self.n_epoch)
             t_board.add_scalar('Test/AvgR', avgR, global_step = self.n_epoch)
             t_board.add_scalar('Test/AvgRouted%', percRouted, global_step = self.n_epoch)
-        print("Epoch: {0}, Prob size: {1}, avgRoutedR: {2}, percRouted: {3}, time: {4}".format(self.n_epoch, p_size, avgRoutedR, percRouted, timeTaken))
+        print("Epoch: {0}, Prob size: {1}, avgRoutedR: {2}, percRouted: {3}".format(self.n_epoch, p_size, avgRoutedR, percRouted))
 
     def epoch(self, p_size, prob_path=None):
         self.n_epoch += 1
