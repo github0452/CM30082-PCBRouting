@@ -137,13 +137,13 @@ class TrainTest:
 #     'learning_rate_gamma': '1',
 #     't': '1'
 # }
-if len(sys.argv) >= 2:
+if len(sys.argv) >= 4:
     config_location = sys.argv[1]
+    N_EPOCHS = sys.argv[2]
+    N_NODES = sys.argv[3]
 with open(config_location) as json_file:
     config = json.load(json_file)
 agent = TrainTest(config=config)
-N_EPOCHS = 5
-N_NODES = 5
 print("Number of epochs: {0}".format(N_EPOCHS))
 # for epoch in range(0, n_epochs):
 for epoch in range(0, N_EPOCHS):
