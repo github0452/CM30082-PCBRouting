@@ -61,7 +61,7 @@ class Critic:
             self.critic = TransformerCritic(critic_config).to(device)
         elif critic_config['model'] == 'TSP_improve':
             self.critic = TSP_improveCritic(critic_config).to(device)
-        self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=float(optimizer_config['learning_rate']))
+        self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=float(critic_config['learning_rate']))
         self.critic_scheduler = torch.optim.lr_scheduler.StepLR(self.critic_optimizer, step_size=1, gamma=float(critic_config['learning_rate_gamma']))
         self.critic_mse_loss = nn.MSELoss()
         self.max_g = float(critic_config['max_grad'])
