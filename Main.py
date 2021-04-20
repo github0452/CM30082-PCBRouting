@@ -24,7 +24,7 @@ class TrainTest:
     def __init__(self, config):
         print("using config:", config)
         # check device
-        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        device = torch.device("cuda:4" if torch.cuda.is_available() else "cpu")
         torch.zeros((1, 1), device=device)
         # setup data stuff
         data_path = config['data_path']
