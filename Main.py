@@ -139,8 +139,8 @@ class TrainTest:
 # }
 if len(sys.argv) >= 4:
     config_location = sys.argv[1]
-    N_EPOCHS = sys.argv[2]
-    N_NODES = sys.argv[3]
+    N_EPOCHS = int(sys.argv[2])
+    N_NODES = int(sys.argv[3])
 with open(config_location) as json_file:
     config = json.load(json_file)
 agent = TrainTest(config=config)
