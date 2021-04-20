@@ -82,6 +82,7 @@ class TrainTest:
                 t_board.add_scalar('Train/BaselineLoss', baseline_loss, global_step = i)
         print("Epoch: {0}, Prob size: {1}, avgRoutedR: {2}, percRouted: {3}".format(self.n_epoch, p_size, avgRoutedR, percRouted))
         self.n_epoch += 1
+        self.save()
 
     def test(self, p_size, prob_path=None, sample_count=1):
         # run tests
@@ -121,8 +122,7 @@ def train_thingy(config):
     prob_size = 5
     print("Number of epochs: {0}".format(n_epochs))
     for epoch in range(0, n_epochs):
-        agent.epoch(prob_size)#, path=file)
-        agent.save()
+        agent.train(prob_size)#, path=file)
 
 def test_generalisation(config):
     agent = TrainTest(config=config)
