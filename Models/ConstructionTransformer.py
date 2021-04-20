@@ -96,9 +96,9 @@ class TransformerWrapped:
             problems = torch.tensor(problems, device=self.device, dtype=torch.float)
             # run through the model
             self.actor.train()
-            with torch.autograd.profiler.profile(use_cuda=True, profile_memory=True, with_stack=True) as prof:
-                action_probs_list, action_list = self.actor(problems, sampling=True)
-            print("forward", prof.key_averages().table(sort_by="self_cpu_time_total"))
+            # with torch.autograd.profiler.profile(use_cuda=True, profile_memory=True, with_stack=True) as prof:
+            action_probs_list, action_list = self.actor(problems, sampling=True)
+            # print("forward", prof.key_averages().table(sort_by="self_cpu_time_total"))
             # use this to train
             # with torch.autograd.profiler.profile(use_cuda=True, profile_memory=True, with_stack=True) as prof:
             # calculate reward and probability
