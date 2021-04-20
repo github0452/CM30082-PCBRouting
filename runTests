@@ -41,16 +41,16 @@
 # 	# python3 Main.py -f config_file
 # done
 
-# N_NODES=5
-# EPOCH=2
-# arrayName=(0 11 12 13 14 15 18 19 2 25 26 28 3 30 6 8)
-# for i in "${arrayName[@]}"; do
-# 	filename="./runs/configFiles/PointerNetwork-${i}"
-# 	tsp python3 Main.py $filename $EPOCH $N_NODES
-# done
-
 N_NODES=5
 EPOCH=2
-for filename in ./runs/configFiles/Transformer-*; do
+arrayName=(0 11 13 14 15 18 25 28 3 8)
+for i in "${arrayName[@]}"; do
+	filename="./runs/configFiles/PointerNetwork-${i}"
 	tsp python3 Main.py $filename $EPOCH $N_NODES
 done
+
+# N_NODES=5
+# EPOCH=2
+# for filename in ./runs/configFiles/Transformer-*; do
+# 	tsp python3 Main.py $filename $EPOCH $N_NODES
+# done
