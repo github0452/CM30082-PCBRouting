@@ -23,7 +23,7 @@ class TrainTest:
     def __init__(self, config):
         print("using config:", config)
         # check device
-        device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
+        device = torch.device("cuda:4" if torch.cuda.is_available() else "cpu")
         torch.zeros((1, 1), device=device)
         # setup data stuff
         data_path = config['data_path']
@@ -154,7 +154,7 @@ def test_generalisation(config):
 #     config = dict(config['config'])
 #     return config
 
-config = {'model': 'TSP_improve', 'environment': 'Improvement', 'data_path': 'runs/ImprTransformerCritic2', 'save_csv': 'True', 'save_tensor': 'True', 'n_batch': '10', 'n_batch_train_size': '512', 'n_batch_test_size': '5120', 'baseline_type': 'Critic', 'n_layers': '2', 'n_head': '1', 'dim_model': '128', 'dim_hidden': '64', 'dim_v': '32', 'dim_k': '32', 'max_grad': '2', 'learning_rate': '1e-4', 'learning_rate_gamma': '1', 't': '1'}
+config = {'model': 'TSP_improve', 'environment': 'Improvement', 'data_path': 'runs/ImprTransformerCritic2', 'save_csv': 'True', 'save_tensor': 'True', 'n_batch': '10', 'n_batch_train_size': '512', 'n_batch_test_size': '2048', 'baseline_type': 'Critic', 'n_layers': '2', 'n_head': '1', 'dim_model': '128', 'dim_hidden': '64', 'dim_v': '32', 'dim_k': '32', 'max_grad': '2', 'learning_rate': '1e-4', 'learning_rate_gamma': '1', 't': '1'}
 # path_list = ["runs/ConstructionPointer.cfg"]
 # path_list = ["runs/ConstructionTransformer.cfg"]
 # path_list = ["runs/ImprovementTransformer.cfg"]
