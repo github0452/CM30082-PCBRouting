@@ -51,7 +51,6 @@ for model_name, env_name, model_config in models:
     folder = "{0}/{1}".format(DATA, model_name)
     Path(folder).mkdir(parents=True, exist_ok=True)
     Path("{0}/configFiles").mkdir(parents=True, exist_ok=True)
-
     for i in range(OPTIONS):
         config = {
             'model': model_name,
