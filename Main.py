@@ -165,5 +165,4 @@ prob_size = 5
 print("Number of epochs: {0}".format(n_epochs))
 # for epoch in range(0, n_epochs):
 for epoch in range(0, n_epochs):
-    agent.epoch(prob_size)#, path=file)
-    agent.save()
+    agent.train(prob_size)#, path=file)
