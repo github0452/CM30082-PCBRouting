@@ -23,7 +23,7 @@ class TrainTest:
     def __init__(self, config):
         print("using config:", config)
         # check device
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         # setup data stuff
         data_path = config['data_path']
         Path(data_path).mkdir(parents=True, exist_ok=True)
@@ -32,10 +32,10 @@ class TrainTest:
             self.csv = {'train': '{0}/train.csv'.format(data_path),
                 'test': '{0}/test.csv'.format(data_path)}
             if not os.path.isfile(self.csv['train']):
-                with open(self.csv['train'], 'w') as file:
+                with open(self.csv['train'], 'w', newline='') as file:
                     csv.writer(file).writerow(["step", "AvgRoutedR", "AvgR", "AvgRouted%", "ActorLoss", "BaselineLoss"])
             if not os.path.isfile(self.csv['test']):
-                with open(self.csv['test'], 'w') as file:
+                with open(self.csv['test'], 'w', newline='') as file:
                     csv.writer(file).writerow(["step", "AvgRoutedR", "AvgR", "AvgRouted%"])
         if bool(config['save_tensor']):
             self.tensor = '{0}/tensor'.format(data_path)
@@ -67,9 +67,9 @@ class TrainTest:
             if torch.is_tensor(baseline_loss):
                 baseline_loss = baseline_loss.item()
             if torch.is_tensor(actor_loss):
-                baseline_loss = actor_loss.item()
+                actor_loss = actor_loss.item()
             if self.csv is not None:
-                with open(self.csv['train'], 'a') as file:
+                with open(self.csv['train'], 'a', newline='') as file:
                     csv.writer(file).writerow([i, avgRoutedR, avgR, percRouted, actor_loss, baseline_loss])
             if self.tensor is not None:
                 t_board = SummaryWriter(self.tensor)
@@ -91,7 +91,7 @@ class TrainTest:
         avgRoutedR = sum(R_routed).item()/len(R_routed) if len(R_routed) > 0 else 10000
         percRouted = len(R_routed)*100/self.n_batch_test_size
         if self.csv is not None:
-            with open(self.csv['test'], 'a') as file:
+            with open(self.csv['test'], 'a', newline='') as file:
                 csv.writer(file).writerow([self.n_epoch, avgRoutedR, avgR, percRouted])
         if self.tensor is not None:
             t_board = SummaryWriter(self.tensor)

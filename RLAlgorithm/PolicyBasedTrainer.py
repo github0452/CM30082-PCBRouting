@@ -61,7 +61,7 @@ class Critic:
             self.critic = TransformerCritic(critic_config).to(device)
         elif critic_config['model'] == 'TSP_improve':
             self.critic = TSP_improveCritic(critic_config).to(device)
-        self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=1e-3)
+        self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=float(optimizer_config['learning_rate']))
         self.critic_scheduler = torch.optim.lr_scheduler.StepLR(self.critic_optimizer, step_size=1, gamma=float(critic_config['learning_rate_gamma']))
         self.critic_mse_loss = nn.MSELoss()
         self.max_g = float(critic_config['max_grad'])
@@ -128,7 +128,7 @@ class Reinforce:
         baseline_loss = self.baseline.train(baseline.reshape(-1), returns.reshape(-1))
         # train the actor - update the weights using optimiser
         self.actor_optimizer.zero_grad()
-        # with torch.autograd.profiler.profile(use_cuda=True, profile_memory=True, with_stack=True) as prof:
+        with torch.autograd.profiler.profile(use_cuda=True, profile_memory=True, with_stack=True) as prof:
         actor_loss.backward() # calculate gradient backpropagation
         torch.nn.utils.clip_grad_norm_(self.actor_param, self.max_g, norm_type=2) # to prevent gradient expansion, set max
         self.actor_optimizer.step() # update weights
