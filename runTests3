@@ -57,7 +57,7 @@
 # done
 
 N_NODES=5
-EPOCH=6
+EPOCH=4
 arrayName=(26 3 7 8)
 # arrayName=(0 15 21 23)
 # for filename in ./runs/configFiles/TSP_improve-*; do
