@@ -46,8 +46,8 @@ class TSP_improve(nn.Module):
         super().__init__() #initialise nn.Modules
         dim_model = int(model_config['dim_model'])
         dim_hidden = int(model_config['dim_hidden'])
-        dim_k = int(model_config['dim_k'])
-        dim_v = dim_k
+        dim_v = int(model_config['dim_v'])
+        dim_k = dim_v
         n_layers = int(model_config['n_layers'])
         n_head = int(model_config['n_head'])
         self.L_embedder = GraphEmbedding(dim_model, usePosEncoding=True)
@@ -80,8 +80,8 @@ class TSP_improveCritic(nn.Module):
         super().__init__() #initialise nn.Modules
         dim_model = int(model_config['dim_model'])
         dim_hidden = int(model_config['dim_hidden'])
-        dim_k = int(model_config['dim_k'])
-        dim_v = dim_k
+        dim_v = int(model_config['dim_v'])
+        dim_k = dim_v
         n_layers = int(model_config['n_layers'])
         n_head = int(model_config['n_head'])
         self.L_embedder = GraphEmbedding(dim_model, usePosEncoding=True)
