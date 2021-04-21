@@ -50,8 +50,8 @@
 # done
 
 N_NODES=5
-EPOCH=4
-arrayName=(14 16 19 2 27 29 3 7)
+EPOCH=8
+arrayName=(19 27 3 7)
 # for filename in ./runs/configFiles/Transformer-*; do
 for i in "${arrayName[@]}"; do
 	filename="./runs/configFiles/Transformer-${i}"
