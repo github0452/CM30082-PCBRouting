@@ -23,12 +23,13 @@ class Environment:
                 and (np.linalg.norm(np.subtract(x, y)[:2],2) < 30
                 or np.linalg.norm(np.subtract(x, y)[2:],2) < 30) ])
             if (invalidPointNo == 0):
-                if (routableOnly and len(copt.bruteForce(problem, 1)) != 0) or not routableOnly:
-                    problems.append(problem)
-                else if not routableOnly:
-                    problems.append(problem)
+                if routableOnly:
+                    if len(copt.bruteForce(problem, 1)) != 0:
+                        problems.append(problem)
+                    else:
+                        noSol += 1
                 else:
-                    noSol += 1
+                    problems.append(problem)
             else:
                 invalid += 1
         # print("Invalid problem: {0}, No solution problem: {1}".format(invalid, noSol))
