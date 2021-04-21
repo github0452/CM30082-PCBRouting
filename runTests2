@@ -42,9 +42,7 @@
 # done
 
 N_NODES=5
-EPOCH=10
-N_NODES=5
-EPOCH=2
+EPOCH=1
 for filename in ./runs/configFiles/PointerNetwork-*; do
 	# filename="./runs/configFiles/PointerNetwork-${i}"
 	tsp python3 Main.py $filename $EPOCH $N_NODES

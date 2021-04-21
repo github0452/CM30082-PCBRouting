@@ -57,7 +57,7 @@
 # done
 
 N_NODES=5
-EPOCH=2
+EPOCH=4
 for filename in ./runs/configFiles/TSP_improve-*; do
 	tsp python3 Main.py $filename $EPOCH $N_NODES
 done
