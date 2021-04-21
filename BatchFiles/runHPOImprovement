@@ -1,0 +1,16 @@
+#!/bin/bash
+N_NODES=5
+EPOCH=8
+arrayName=(0 15)
+# for filename in ./runs/configFiles/TSP_improve-*; do
+for i in "${arrayName[@]}"; do
+	filename="./runs/configFiles/TSP_improve-${i}"
+	tsp python3 Main.py $filename $EPOCH $N_NODES
+done
+
+#COPY TO KEEP
+# N_NODES=5
+# EPOCH=2
+# for filename in ./runs/configFiles/TSP_improve-*; do
+# 	tsp python3 Main.py $filename $EPOCH $N_NODES
+# done
