@@ -42,8 +42,8 @@
 # done
 
 N_NODES=5
-EPOCH=8
-arrayName=(0 11 14 25)
+EPOCH=10
+arrayName=(0 14)
 # for filename in ./runs/configFiles/PointerNetwork-*; do
 for i in "${arrayName[@]}"; do
 	filename="./runs/configFiles/PointerNetwork-${i}"
