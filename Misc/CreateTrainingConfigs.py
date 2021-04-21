@@ -47,7 +47,9 @@ models = [
 RUNS = 9
 for model_name, env_name, model_config in models:
     model_folder = "finalTraining"
+    config_folder = "{0}/config".format(model_folder)
     Path(model_folder).mkdir(parents=True, exist_ok=True)
+    Path(config_folder).mkdir(parents=True, exist_ok=True)
     for i in range(RUNS):
         config = {
             'model': model_name,
@@ -56,6 +58,6 @@ for model_name, env_name, model_config in models:
         }
         config.update(general_config)
         config.update(model_config)
-        config_file = "finalTraining/config-{0}-run{1}".format(model_name, i)
+        config_file = "{0}/{1}-run{2}".format(config_folder, model_name, i)
         with open(config_file, 'w') as outfile:
             json.dump(config, outfile, indent=4)
