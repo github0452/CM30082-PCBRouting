@@ -12,7 +12,7 @@ class Environment:
     def __init__(self):
         pass
 
-    def gen(self, list_size, prob_size, routableOnly=True):
+    def gen(self, list_size, prob_size, routableOnly=False):
         problems = []
         invalid = 0
         noSol = 0
@@ -24,6 +24,8 @@ class Environment:
                 or np.linalg.norm(np.subtract(x, y)[2:],2) < 30) ])
             if (invalidPointNo == 0):
                 if (routableOnly and len(copt.bruteForce(problem, 1)) != 0) or not routableOnly:
+                    problems.append(problem)
+                else if not routableOnly:
                     problems.append(problem)
                 else:
                     noSol += 1
