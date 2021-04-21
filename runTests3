@@ -58,7 +58,7 @@
 
 N_NODES=5
 EPOCH=4
-arrayName=(0 12 15 17 21 22 23 26 27 3 31 4 5 6 7 8)
+arrayName=(0 15 21 23 26 3 7 8)
 # for filename in ./runs/configFiles/TSP_improve-*; do
 for i in "${arrayName[@]}"; do
 	filename="./runs/configFiles/TSP_improve-${i}"
