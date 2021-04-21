@@ -44,9 +44,7 @@ models = [
     ('Transformer', 'Construction', con_trans_config),
     ('TSP_improve', 'Improvement', improve_config)]
 
-DATA =
 RUNS = 9
-
 for model_name, env_name, model_config in models:
     model_folder = "finalTraining/{1}".format(model_name)
     Path(model_folder).mkdir(parents=True, exist_ok=True)
