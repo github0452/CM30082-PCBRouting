@@ -12,7 +12,7 @@ class Environment:
     def __init__(self):
         pass
 
-    def gen(self, list_size, prob_size, routableOnly=False):
+    def gen(self, list_size, prob_size, routableOnly=True):
         problems = []
         invalid = 0
         noSol = 0
