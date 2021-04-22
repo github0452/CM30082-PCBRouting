@@ -46,7 +46,7 @@ models = [
 
 RUNS = 5
 for model_name, env_name, model_config in models:
-    model_folder = "finalTraining/trainingOnOnlyProblemsWithSolutions"
+    model_folder = "trainingOnOnlyProblemsWithSolutions"
     config_folder = "{0}/config".format(model_folder)
     Path(model_folder).mkdir(parents=True, exist_ok=True)
     Path(config_folder).mkdir(parents=True, exist_ok=True)

@@ -9,8 +9,8 @@ import torch
 import random
 import numpy as np
 class Environment:
-    def __init__(self):
-        pass
+    def __init__(self, routableOnly):
+        self.routableOnly = routableOnly
 
     def gen(self, list_size, prob_size, routableOnly=True):
         problems = []
@@ -23,7 +23,7 @@ class Environment:
                 and (np.linalg.norm(np.subtract(x, y)[:2],2) < 30
                 or np.linalg.norm(np.subtract(x, y)[2:],2) < 30) ])
             if (invalidPointNo == 0):
-                if routableOnly:
+                if self.routableOnly:
                     if len(copt.bruteForce(problem, 1)) != 0:
                         problems.append(problem)
                     else:
@@ -84,9 +84,6 @@ class Construction(Environment):
         return (cur_state.size(1) == problems.size(1))
 
 class Improvement(Environment):
-    def __init__(self):
-        pass
-
     def getStartingState(self, list_size, prob_size, device):
         initial_solution = torch.linspace(0, prob_size-1, steps=prob_size, device=device).expand(list_size, prob_size)
         return initial_solution

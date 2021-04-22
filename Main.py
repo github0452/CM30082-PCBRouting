@@ -21,7 +21,7 @@ from Models.ConstructionTransformer import TransformerWrapped
 from RLAlgorithm.PolicyBasedTrainer import Reinforce
 
 class TrainTest:
-    def __init__(self, config):
+    def __init__(self, config, routableOnly=False):
         print("using config:", config)
         # check device
         device = torch.device("cuda:5" if torch.cuda.is_available() else "cpu")
@@ -48,7 +48,7 @@ class TrainTest:
         self.n_batch_train_size = int(config['n_batch_train_size'])
         self.n_batch_test_size = int(config['n_batch_test_size'])
         #=-=-=-=-=-=-=ENVIRONMENTS and TRAINER=-=-=-=-===-=-=-=-=-=-=
-        env = {'Construction': Construction(), 'Improvement': Improvement()}.get(config['environment'])
+        env = {'Construction': Construction(routableOnly), 'Improvement': Improvement(routableOnly)}.get(config['environment'])
         trainer = Reinforce(device, config)
         #=-=-=-=-===-=-=-=-=-=-=MODEL=-=-=-=-===-=-=-=-=-=-=
         model_type = config['model']
@@ -147,7 +147,12 @@ N_EPOCHS = int(sys.argv[2])
 N_NODES = int(sys.argv[3])
 with open(config_location) as json_file:
     config = json.load(json_file)
-agent = TrainTest(config=config)
+if len(sys.argv) >= 5:
+    routableOnly = bool(sys.argv[4])
+    print(routableOnly)
+    agent = TrainTest(config=config, routableOnly=routableOnly)
+else:
+    agent = TrainTest(config=config)
 print("Number of epochs: {0}".format(N_EPOCHS))
 # for epoch in range(0, n_epochs):
 for epoch in range(0, N_EPOCHS):
