@@ -40,13 +40,13 @@ improve_config = {
     't': '1'
 }
 models = [
-    ('PointerNetwork', 'Construction', con_pntr_config),
+    # ('PointerNetwork', 'Construction', con_pntr_config),
     ('Transformer', 'Construction', con_trans_config),
     ('TSP_improve', 'Improvement', improve_config)]
 
-RUNS = 9
+RUNS = 5
 for model_name, env_name, model_config in models:
-    model_folder = "finalTraining"
+    model_folder = "finalTraining/trainingOnOnlyProblemsWithSolutions"
     config_folder = "{0}/config".format(model_folder)
     Path(model_folder).mkdir(parents=True, exist_ok=True)
     Path(config_folder).mkdir(parents=True, exist_ok=True)
