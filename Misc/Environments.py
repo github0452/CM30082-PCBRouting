@@ -18,7 +18,7 @@ class Environment:
         invalid = 0
         noSol = 0
         while len(problems) < list_size:
-            print(len(problems))
+            # print(len(problems))
             problem = copt.getProblem(prob_size) #generate problem
             # check the problem is valid
             invalidPointNo = len([ 1 for x in problem for y in problem if x != y
