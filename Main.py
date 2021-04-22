@@ -140,7 +140,10 @@ class TrainTest:
 # }
 # N_EPOCHS = 1
 # N_NODES = 7
-
+def trace(frame, event, arg):
+    print("%s, %s:%d" % (event, frame.f_code.co_filename, frame.f_lineno))
+    return trace
+sys.settrace(trace)
 config_location = sys.argv[1]
 N_EPOCHS = int(sys.argv[2])
 N_NODES = int(sys.argv[3])
