@@ -136,17 +136,21 @@ class PtrNetWrapped: #wrapper for model
 
     # given a problem size and batch size will train the model
     def train_batch(self, n_batch, p_size, path=None):
+        print("test1.1")
         problems = self.env.gen(n_batch, p_size) if (path is None) else self.env.load(path, n_batch) # generate or load problems
         problems = torch.tensor(problems, device=self.device, dtype=torch.float)
+        print("test1.2")
         # run through the model
         self.actor.train()
         # with torch.autograd.profiler.profile(use_cuda=True, profile_memory=True, with_stack=True) as prof:
         action_probs_list, action_list = self.actor(problems, sampling=True) #action_probs_list (n_node x [n_batch])
+        print("test1.3")
         # print("forward", prof.key_averages().table(sort_by="self_cpu_time_total"))
         # calculate reward and probability
         reward = torch.tensor(self.env.evaluate(problems, action_list), device=self.device, dtype=torch.float)
         # with torch.autograd.profiler.profile(use_cuda=True, profile_memory=True, with_stack=True) as prof:
         probs = action_probs_list.prod(dim=1)
+        print("test1.4")
         # use this to train
         actor_loss, baseline_loss = self.trainer.train(problems, action_list.unsqueeze(dim=0), reward.unsqueeze(dim=0), probs.unsqueeze(dim=0))
         # print(prof.key_averages().table(sort_by="self_cpu_time_total"))
