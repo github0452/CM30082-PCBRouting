@@ -18,14 +18,11 @@ class Environment:
         invalid = 0
         noSol = 0
         while len(problems) < list_size:
-            print("test1.1.2")
             problem = copt.getProblem(prob_size) #generate problem
-            print("test1.1.3")
             # check the problem is valid
             invalidPointNo = len([ 1 for x in problem for y in problem if x != y
                 and (np.linalg.norm(np.subtract(x, y)[:2],2) < 30
                 or np.linalg.norm(np.subtract(x, y)[2:],2) < 30) ])
-            print("test1.1.4")
             if (invalidPointNo == 0):
                 if routableOnly:
                     if len(copt.bruteForce(problem, 1)) != 0:
@@ -36,9 +33,11 @@ class Environment:
                     problems.append(problem)
             else:
                 invalid += 1
+        print("test1.1.2")
         # print("Invalid problem: {0}, No solution problem: {1}".format(invalid, noSol))
         # randomly shuffling the data to prevent any bias, e.g. if testing later with different problem sizes
         random.shuffle(problems)
+        print("test1.1.3")
         return problems
 
     # problems: torch.Size([100, 5, 4]), orders [5, 100]
