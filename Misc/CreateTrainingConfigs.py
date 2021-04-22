@@ -29,13 +29,13 @@ con_trans_config = {
     'learning_rate_gamma': 1.0
 }
 improve_config = {
-    'n_layers': 4,
+    'n_layers': 1,
     'n_head': 1,
     'dim_model': 128,
     'dim_hidden': 64,
-    'dim_v': 32,
-    'max_grad': 1,
-    'learning_rate': 1e-3,
+    'dim_v': 64,
+    'max_grad': 2,
+    'learning_rate': 1e-4,
     'learning_rate_gamma': 1.0,
     't': '1'
 }
