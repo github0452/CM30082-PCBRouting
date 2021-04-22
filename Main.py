@@ -24,7 +24,7 @@ class TrainTest:
     def __init__(self, config):
         print("using config:", config)
         # check device
-        device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         torch.zeros((1, 1), device=device)
         # setup data stuff
         data_path = config['data_path']
@@ -62,7 +62,9 @@ class TrainTest:
         init = self.n_epoch*self.n_batch
         for i in range(init, init+self.n_batch):
             #pass it through reinforcement learning algorithm to train
+            print("test1")
             R, actor_loss, baseline_loss = self.wrapped_actor.train_batch(self.n_batch_train_size, p_size, path=prob_path)
+            print("test2")
             R_routed = [x for x in R if (x != 10000)]
             avgR = R.mean().item()
             avgRoutedR = sum(R_routed).item()/len(R_routed) if len(R_routed) > 0 else 10000
@@ -114,7 +116,7 @@ class TrainTest:
             print('Loaded with', self.n_epoch, 'epochs.')
         else:
             print('weights not found for', self.model_name)
-
+#
 # config = {
 #     'model': 'TSP_improve',
 #     'environment': 'Improvement',
@@ -136,10 +138,12 @@ class TrainTest:
 #     'learning_rate_gamma': '1',
 #     't': '1'
 # }
-if len(sys.argv) >= 4:
-    config_location = sys.argv[1]
-    N_EPOCHS = int(sys.argv[2])
-    N_NODES = int(sys.argv[3])
+# N_EPOCHS = 1
+# N_NODES = 7
+
+config_location = sys.argv[1]
+N_EPOCHS = int(sys.argv[2])
+N_NODES = int(sys.argv[3])
 with open(config_location) as json_file:
     config = json.load(json_file)
 agent = TrainTest(config=config)
