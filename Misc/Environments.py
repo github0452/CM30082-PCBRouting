@@ -13,12 +13,10 @@ class Environment:
         pass
 
     def gen(self, list_size, prob_size, routableOnly=False):
-        print("test1.1.1")
         problems = []
         invalid = 0
         noSol = 0
         while len(problems) < list_size:
-            # print(len(problems))
             problem = copt.getProblem(prob_size) #generate problem
             # check the problem is valid
             invalidPointNo = len([ 1 for x in problem for y in problem if x != y
@@ -34,11 +32,9 @@ class Environment:
                     problems.append(problem)
             else:
                 invalid += 1
-        print("test1.1.2")
         # print("Invalid problem: {0}, No solution problem: {1}".format(invalid, noSol))
         # randomly shuffling the data to prevent any bias, e.g. if testing later with different problem sizes
         random.shuffle(problems)
-        print("test1.1.3")
         return problems
 
     # problems: torch.Size([100, 5, 4]), orders [5, 100]

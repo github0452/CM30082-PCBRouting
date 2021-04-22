@@ -62,9 +62,7 @@ class TrainTest:
         init = self.n_epoch*self.n_batch
         for i in range(init, init+self.n_batch):
             #pass it through reinforcement learning algorithm to train
-            print("test1")
             R, actor_loss, baseline_loss = self.wrapped_actor.train_batch(self.n_batch_train_size, p_size, path=prob_path)
-            print("test2")
             R_routed = [x for x in R if (x != 10000)]
             avgR = R.mean().item()
             avgRoutedR = sum(R_routed).item()/len(R_routed) if len(R_routed) > 0 else 10000
