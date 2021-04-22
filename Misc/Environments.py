@@ -13,15 +13,19 @@ class Environment:
         pass
 
     def gen(self, list_size, prob_size, routableOnly=False):
+        print("test1.1.1")
         problems = []
         invalid = 0
         noSol = 0
         while len(problems) < list_size:
+            print("test1.1.2")
             problem = copt.getProblem(prob_size) #generate problem
+            print("test1.1.3")
             # check the problem is valid
             invalidPointNo = len([ 1 for x in problem for y in problem if x != y
                 and (np.linalg.norm(np.subtract(x, y)[:2],2) < 30
                 or np.linalg.norm(np.subtract(x, y)[2:],2) < 30) ])
+            print("test1.1.4")
             if (invalidPointNo == 0):
                 if routableOnly:
                     if len(copt.bruteForce(problem, 1)) != 0:
