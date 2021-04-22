@@ -1,5 +1,6 @@
 #!/bin/bash
-N_NODES=(5 7)
+# N_NODES=(5 7)
+N_NODES=(8)
 CON_EPOCH=25
 IMP_EPOCH=40
 # for filename in ./runs/configFiles/Transformer-*; do
