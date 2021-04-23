@@ -7,7 +7,7 @@ for problem_size in "${N_NODES[@]}"; do
 	for filename in finalTraining/config/PointerNetwork-*; do
 		tsp python3 Main.py $filename 15 $problem_size #35
 	done
-	for filename in trainingOnOnlyProblemsWithSolutions/config/Transformer-*; do
+	for filename in finalTraining/config/Transformer-*; do
 		tsp python3 Main.py $filename 15 $problem_size True
 	done
 	# for filename in trainingOnOnlyProblemsWithSolutions/config/TSP_improve-*; do
