@@ -8,7 +8,7 @@ for problem_size in "${N_NODES[@]}"; do
 		tsp python3 Main.py $filename 15 $problem_size #35
 	done
 	for filename in finalTraining/config/Transformer-*; do
-		tsp python3 Main.py $filename 15 $problem_size True
+		tsp python3 Main.py $filename 15 $problem_size #True
 	done
 	# for filename in trainingOnOnlyProblemsWithSolutions/config/TSP_improve-*; do
 	# 	tsp python3 Main.py $filename $IMP_EPOCH $problem_size True
