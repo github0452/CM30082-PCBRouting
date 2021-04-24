@@ -158,6 +158,6 @@ print("Number of epochs: {0}".format(N_EPOCHS))
 for epoch in range(0, N_EPOCHS):
     if purpose == "test":
         agent.test(N_NODES)
-    elif purpose == "train"
+    elif purpose == "train":
         agent.train(N_NODES)#, path=file)
 # agent.save()
