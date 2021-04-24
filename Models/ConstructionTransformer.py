@@ -114,6 +114,8 @@ class TransformerWrapped:
             problems = torch.tensor(problems, device=self.device, dtype=torch.float)
             # run through model
             best_so_far = None
+            torch.cuda.synchronize()
+            stime = time.perf_counter()
             self.actor.eval()
             for _ in range(sample_count):
                 action_probs_list, action_list = self.actor(problems, sampling=True)
@@ -122,8 +124,9 @@ class TransformerWrapped:
                     best_so_far = reward
                 else:
                     best_so_far = torch.cat((best_so_far[None, :], reward[None, :]), 0).min(0)[0]
-                print(best_so_far[0:10])
-            return best_so_far
+            torch.cuda.synchronize()
+            time = time.perf_counter() - stime
+            return best_so_far, time
 
         def save(self):
             model_dict = {}

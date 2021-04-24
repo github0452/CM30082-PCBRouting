@@ -38,7 +38,7 @@ class TrainTest:
                     csv.writer(file).writerow(["step", "AvgRoutedR", "AvgR", "AvgRouted%", "ActorLoss", "BaselineLoss"])
             if not os.path.isfile(self.csv['test']):
                 with open(self.csv['test'], 'w', newline='') as file:
-                    csv.writer(file).writerow(["step", "AvgRoutedR", "AvgR", "AvgRouted%"])
+                    csv.writer(file).writerow(["step", "AvgRoutedR", "AvgR", "AvgRouted%", "AvgTime"])
         if bool(config['save_tensor']):
             self.tensor = '{0}/tensor'.format(data_path)
         self.model_name = '{0}/checkpoint'.format(data_path)
@@ -86,20 +86,23 @@ class TrainTest:
 
     def test(self, p_size, prob_path=None, sample_count=1):
         # run tests
-        R = self.wrapped_actor.test(self.n_batch_test_size, p_size, path=prob_path, sample_count=sample_count)
+        R, time = self.wrapped_actor.test(self.n_batch_test_size, p_size, path=prob_path, sample_count=sample_count)
         R_routed = [x for x in R if (x != 10000)]
         avgR = R.mean().item()
         avgRoutedR = sum(R_routed).item()/len(R_routed) if len(R_routed) > 0 else 10000
         percRouted = len(R_routed)*100/self.n_batch_test_size
+        time = time/self.n_batch_test_size
         if self.csv is not None:
             with open(self.csv['test'], 'a', newline='') as file:
-                csv.writer(file).writerow([self.n_epoch, avgRoutedR, avgR, percRouted])
+                csv.writer(file).writerow([self.n_epoch, avgRoutedR, avgR, percRouted, time])
         if self.tensor is not None:
             t_board = SummaryWriter(self.tensor)
             t_board.add_scalar('Test/AvgRoutedR', avgRoutedR, global_step = self.n_epoch)
             t_board.add_scalar('Test/AvgR', avgR, global_step = self.n_epoch)
             t_board.add_scalar('Test/AvgRouted%', percRouted, global_step = self.n_epoch)
-        print("Epoch: {0}, Prob size: {1}, avgRoutedR: {2}, percRouted: {3}".format(self.n_epoch, p_size, avgRoutedR, percRouted))
+            t_board.add_scalar('Test/Time', time, global_step = self.n_epoch)
+        print("Epoch: {0}, Prob size: {1}, avgRoutedR: {2}, percRouted: {3}, time: {4}"
+            .format(self.n_epoch, p_size, avgRoutedR, percRouted, time))
 
     def save(self):
         model_dict = self.wrapped_actor.save() #save training details
@@ -142,19 +145,19 @@ class TrainTest:
 #     print("%s, %s:%d" % (event, frame.f_code.co_filename, frame.f_lineno))
 #     return trace
 # sys.settrace(trace)
-config_location = sys.argv[1]
-N_EPOCHS = int(sys.argv[2])
-N_NODES = int(sys.argv[3])
+purpose = sys.argv[1]
+config_location = sys.argv[2]
+N_EPOCHS = int(sys.argv[3])
+N_NODES = int(sys.argv[4])
+FILTER_NOSOLPROB = bool(sys.argv[5])
 with open(config_location) as json_file:
     config = json.load(json_file)
-if len(sys.argv) >= 5:
-    routableOnly = bool(sys.argv[4])
-    print(routableOnly)
-    agent = TrainTest(config=config, routableOnly=routableOnly)
-else:
-    agent = TrainTest(config=config)
+agent = TrainTest(config=config, routableOnly=FILTER_NOSOLPROB)
 print("Number of epochs: {0}".format(N_EPOCHS))
 # for epoch in range(0, n_epochs):
 for epoch in range(0, N_EPOCHS):
-    agent.train(N_NODES)#, path=file)
-agent.save()
+    if purpose == "test":
+        agent.test(N_NODES)
+    elif purpose == "train"
+        agent.train(N_NODES)#, path=file)
+# agent.save()

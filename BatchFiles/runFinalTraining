@@ -1,16 +1,15 @@
 #!/bin/bash
-N_NODES=(8)
-CON_EPOCH=25
-IMP_EPOCH=40
+N_NODES=(5 8)
+EPOCH = 10
 # for filename in ./runs/configFiles/Transformer-*; do
 for problem_size in "${N_NODES[@]}"; do
-	for filename in finalTraining/config/PointerNetwork-*; do
-		tsp python3 Main.py $filename 35 $problem_size #35
+	for filename in finalTraining/*run*-${problem_size}; do
+		tsp python3 Main.py test $filename $EPOCH $problem_size True
 	done
-	for filename in finalTraining/config/Transformer-*; do
-		tsp python3 Main.py $filename 15 $problem_size #True
-	done
-	# for filename in trainingOnOnlyProblemsWithSolutions/config/TSP_improve-*; do
+	# for filename in finalTraining/config/Transformer-5; do
+	# 	tsp python3 Main.py test $filename $EPOCH $problem_size True
+	# done
+	# for filename in trainingOnOnlyProblemsWithSolutions/config/TSP_improve-6; do
 	# 	tsp python3 Main.py $filename $IMP_EPOCH $problem_size True
 	# done
 done

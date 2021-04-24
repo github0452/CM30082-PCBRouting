@@ -159,6 +159,8 @@ class TSP_improveWrapped:
         problems = self.env.gen(n_batch, p_size) if (path is None) else self.env.load(path, n_batch) # generate or load problems
         problems = torch.tensor(problems, device=self.device, dtype=torch.float)
         # setup inital parameters
+        torch.cuda.synchronize()
+        stime = time.perf_counter()
         state = self.env.getStartingState(n_batch, p_size, self.device)
         best_so_far = torch.tensor(self.env.evaluate(problems, state), device=self.device, dtype=torch.float) #[batch_size]
         exchange = None
@@ -170,7 +172,9 @@ class TSP_improveWrapped:
             cost = torch.tensor(self.env.evaluate(problems, state), device=self.device, dtype=torch.float)
             best_so_far = torch.cat((best_so_far[None, :], cost[None, :]), 0).min(0)[0]
             #setup for next round
-        return best_so_far
+        torch.cuda.synchronize()
+        time = time.perf_counter() - stime
+        return best_so_far, time
 
     def save(self):
         model_dict = {}
