@@ -156,7 +156,9 @@ agent = TrainTest(config=config, routableOnly=FILTER_NOSOLPROB)
 print("Number of epochs: {0}".format(N_EPOCHS))
 # for epoch in range(0, n_epochs):
 for epoch in range(0, N_EPOCHS):
+    print(purpose)
     if purpose == "test":
+        print("TESTING")
         agent.test(N_NODES)
     elif purpose == "train":
         agent.train(N_NODES)#, path=file)
