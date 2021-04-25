@@ -24,7 +24,7 @@ class TrainTest:
     def __init__(self, config, routableOnly=False):
         print("using config:", config)
         # check device
-        device = torch.device("cuda:5" if torch.cuda.is_available() else "cpu")
+        device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
         # setup data stuff
         data_path = config['data_path']
         Path(data_path).mkdir(parents=True, exist_ok=True)
@@ -86,8 +86,8 @@ class TrainTest:
         R_routed = [x for x in R if (x != 10000)]
         avgR = R.mean().item()
         avgRoutedR = sum(R_routed).item()/len(R_routed) if len(R_routed) > 0 else 10000
-        percRouted = len(R_routed)*100/self.n_batch_test_size
-        time = time/self.n_batch_test_size
+        percRouted = len(R_routed)*100/len(R)
+        time = time/len(R)
         if self.csv is not None:
             if not os.path.isfile(self.csv['test']):
                 with open(self.csv['test'], 'w', newline='') as file:

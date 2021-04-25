@@ -198,7 +198,7 @@ def runMetrics(data_path):
 
 DATA = ["datasets/n5b5120.pkg","datasets/n8b5120.pkg"]
 for data_path in DATA:
-    runMetrics(data_path)
+    runMetrics(str(data_path))
 
 # def test(batchSize, seqLen):
 #     routingDistribution = {}
