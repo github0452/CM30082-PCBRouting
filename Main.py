@@ -155,6 +155,7 @@ with open(config_location) as json_file:
 agent = TrainTest(config=config, routableOnly=FILTER_NOSOLPROB)
 print("Number of epochs: {0}".format(N_EPOCHS))
 # for epoch in range(0, n_epochs):
+agent.load()
 for epoch in range(0, N_EPOCHS):
     if purpose == "test":
         sample_count = int(sys.argv[6])
