@@ -159,7 +159,7 @@ class Baseline:
         return solutions
 
 # solutions: (isSuccessfullyRouted, numPointsRouted, order, measure)
-def metrics(solutionFunction, *parameters):
+def metrics(data_path, solutionFunction, *parameters):
     env = Environment()
     problems = env.load("datasets/n5b5120.pkg")
     batchSize, seqLen = len(problems), len(problems[0])
@@ -176,14 +176,16 @@ def metrics(solutionFunction, *parameters):
     print("batchSize:", batchSize, ", problem size:", seqLen)
     print("avgReward: {0}, avgRoutedReward: {1}, percRouted: {2}, timeTaken: {3}".format(avgR, avgRoutedR, percRouted, timeTaken))
 
-def runMetrics():
-    print("Brute force", metrics(Baseline.bruteForce))
-    print("Random sampling", metrics(Baseline.randomSampling))
-    print("Nearest neighbour", metrics(Baseline.NN))
-    print("Routable random hc metrics with 1 restart(s)", metrics(Baseline.RoutableRRHillClimbing))
-    print("Routable random hc metrics with 5 restart(s)", metrics(Baseline.RoutableRRHillClimbing, 5))
+def runMetrics(data_path):
+    print("Brute force", metrics(data_path, Baseline.bruteForce))
+    print("Random sampling", metrics(data_path, Baseline.randomSampling))
+    print("Nearest neighbour", metrics(data_path, Baseline.NN))
+    print("Routable random hc metrics with 1 restart(s)", metrics(data_path, Baseline.RoutableRRHillClimbing))
+    print("Routable random hc metrics with 5 restart(s)", metrics(data_path, Baseline.RoutableRRHillClimbing, 5))
 
-runMetrics()
+DATA = ["datasets/n5b5120.pkg", "datasets/n8b5120.pkg"]
+for data_path in DATA:
+    runMetrics(data_path)
 
 # def test(batchSize, seqLen):
 #     routingDistribution = {}

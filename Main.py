@@ -104,11 +104,10 @@ class TrainTest:
             .format(self.n_epoch, p_size, avgRoutedR, percRouted, time))
 
     def save(self):
-        if os.path.exists(self.model_name):
-            os.remove(self.model_name)
+        path = "{0}-{1}".format(self.model_name, self.n_epoch)
         model_dict = self.wrapped_actor.save() #save training details
         model_dict['n_epoch'] = self.n_epoch
-        torch.save(model_dict, self.model_name)
+        torch.save(model_dict, path)
 
     def load(self):
         if os.path.exists(self.model_name):
