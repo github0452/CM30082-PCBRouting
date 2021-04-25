@@ -177,7 +177,7 @@ class PtrNetWrapped: #wrapper for model
     def save(self):
         model_dict = {}
         model_dict['actor_model_state_dict'] = self.actor.state_dict()
-        # model_dict.update(self.trainer.save())
+        model_dict.update(self.trainer.save())
         return model_dict
 
     def load(self, checkpoint):
