@@ -109,9 +109,9 @@ class TrainTest:
         model_dict['n_epoch'] = self.n_epoch
         torch.save(model_dict, path)
 
-    def extract_number(f):
-    s = re.findall("\d+$",f)
-    return (int(s[0]) if s else -1,f)
+    # def extract_number(f):
+    # s = re.findall("\d+$",f)
+    # return (int(s[0]) if s else -1,f)
 
     def load(self):
         max(list_of_files,key=extract_number)
