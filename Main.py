@@ -48,7 +48,7 @@ class TrainTest:
         if model_type == 'PointerNetwork': self.wrapped_actor = PtrNetWrapped(env, trainer, device, config)
         elif model_type == 'Transformer': self.wrapped_actor = TransformerWrapped(env, trainer, device, config)
         elif model_type == 'TSP_improve': self.wrapped_actor = TSP_improveWrapped(env, trainer, device, config)
-        self.load()
+        # self.load()
 
     def train(self, p_size, prob_path=None):
         # loop through batches
@@ -154,6 +154,7 @@ with open(config_location) as json_file:
 agent = TrainTest(config=config, routableOnly=FILTER_NOSOLPROB)
 print("Number of epochs: {0}".format(N_EPOCHS))
 # for epoch in range(0, n_epochs):
+agent.load()
 for epoch in range(0, N_EPOCHS):
     print(purpose)
     if purpose == "test":
