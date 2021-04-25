@@ -2,8 +2,10 @@ import sys
 import os
 import pickle
 
-# import Misc.copt as copt
-import copt
+try:
+  import Misc.copt as copt
+except ImportError:
+  import copt
 # import Baselines
 import torch
 import random
