@@ -1,11 +1,11 @@
 #!/bin/bash
 N_NODES=(5 8)
-EPOCH = 10
+EPOCH=10
 # for filename in ./runs/configFiles/Transformer-*; do
 for problem_size in "${N_NODES[@]}"; do
-	FILES=("DATA_Testing/SeqLen{$problem_size}-PointerNetwork-config" 
-		"DATA_Testing/SeqLen{$problem_size}-TransformerNetwork-config" 
-		"DATA_Testing/SeqLen{$problem_size}-ImprovementNetwork-config")
+	FILES=("DATA_Testing/SeqLen${problem_size}-PointerNetwork-config" 
+		"DATA_Testing/SeqLen${problem_size}-TransformerNetwork-config" 
+		"DATA_Testing/SeqLen${problem_size}-ImprovementNetwork-config")
 	STEPS=(1 ${problem_size} $(( problem_size*2 )) $(( problem_size*problem_size )))
 	data="datasets/n${problem_size}b5120.pkg"
 	for file_name in "${FILES[@]}"; do
