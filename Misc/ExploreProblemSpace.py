@@ -10,7 +10,7 @@ print("Python version: ", python_version())
 import copt
 import Environments
 import copy
-import time
+from time import perf_counter
 import itertools
 
 #torch stuff
