@@ -157,7 +157,7 @@ print("Number of epochs: {0}".format(N_EPOCHS))
 for epoch in range(0, N_EPOCHS):
     print(purpose)
     if purpose == "test":
-        sample_count = bool(sys.argv[6])
+        sample_count = int(sys.argv[6])
         dataset = sys.argv[7]
         print("TESTING")
         agent.test(N_NODES, prob_path=dataset, sample_count=sample_count)
