@@ -115,7 +115,7 @@ class TrainTest:
 
     def load(self):
         # max(list_of_files,key=extract_number)
-        path = "{0}-{1}".format(self.model_name, 0)
+        path = "{0}-{1}".format(self.model_name, 40)
         if os.path.exists(path):
             checkpoint = torch.load(path)
             self.wrapped_actor.load(checkpoint) #load training details
