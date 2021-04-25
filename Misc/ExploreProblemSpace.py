@@ -163,7 +163,7 @@ class Baseline:
 # solutions: (isSuccessfullyRouted, numPointsRouted, order, measure)
 def metrics(data_path, solutionFunction, *parameters):
     env = Environment()
-    problems = env.load("datasets/n5b5120.pkg")
+    problems = env.load(data_path)
     batchSize, seqLen = len(problems), len(problems[0])
     torch.cuda.synchronize(device)
     stime = perf_counter()
@@ -191,7 +191,7 @@ def runMetrics(data_path):
     print("Routable random hc metrics with 1 restart(s)", metrics(data_path, Baseline.RoutableRRHillClimbing))
     print("Routable random hc metrics with 5 restart(s)", metrics(data_path, Baseline.RoutableRRHillClimbing, 5))
 
-DATA = ["datasets/n5b5120.pkg", "datasets/n8b5120.pkg"]
+DATA = ["datasets/n8b5120.pkg"]
 for data_path in DATA:
     runMetrics(data_path)
 
