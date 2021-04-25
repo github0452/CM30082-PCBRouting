@@ -29,7 +29,7 @@ from Environments import Environment
 
 # if gpu is to be used
 if torch.cuda.is_available():
-    device = torch.device("cuda:1")
+    device = torch.device("cuda:5")
     print("Using CUDA GPU")
 else:
     device = torch.device("cpu")
