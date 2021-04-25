@@ -146,8 +146,8 @@ class Reinforce:
         model_dict = {}
         model_dict['actor_optimizer_state_dict'] = self.actor_optimizer.state_dict()
         model_dict['actor_schedular_state_dict'] = self.actor_scheduler.state_dict()
-        # if not self.baseline_type == 'None':
-        #     model_dict.update(self.baseline.save())
+        if not self.baseline_type == 'None':
+            model_dict.update(self.baseline.save())
         return model_dict
 
     def load(self, checkpoint):
