@@ -182,7 +182,7 @@ def metrics(data_path, solutionFunction, *parameters):
         with open(file, 'w', newline='') as file:
             csv.writer(file).writerow(["Function", "data_path", "AvgRoutedR", "AvgR", "AvgRouted%", "AvgTime"])
     with open(file, 'a', newline='') as file:
-        csv.writer(file).writerow([solutionFunction.__name__, data_path, avgR, avgRoutedR, percRouted, time])
+        csv.writer(file).writerow([solutionFunction.__name__, data_path, avgR, avgRoutedR, percRouted, timeTaken])
 
 def runMetrics(data_path):
     print("Brute force", metrics(data_path, Baseline.bruteForce))
