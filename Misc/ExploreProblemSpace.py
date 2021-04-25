@@ -7,6 +7,7 @@ print("Python version: ", python_version())
 # assert python_version() == "3.7.9"
 
 #imports
+import os
 import copt
 import Environments
 import copy
