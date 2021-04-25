@@ -48,7 +48,7 @@ class TrainTest:
         if model_type == 'PointerNetwork': self.wrapped_actor = PtrNetWrapped(env, trainer, device, config)
         elif model_type == 'Transformer': self.wrapped_actor = TransformerWrapped(env, trainer, device, config)
         elif model_type == 'TSP_improve': self.wrapped_actor = TSP_improveWrapped(env, trainer, device, config)
-        self.load()
+        # self.load()
 
     def train(self, p_size, prob_path=None):
         # loop through batches
