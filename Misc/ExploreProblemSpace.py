@@ -29,7 +29,7 @@ from Environments import Environment
 
 # if gpu is to be used
 if torch.cuda.is_available():
-    device = torch.device("cuda:0")
+    device = torch.device("cuda:1")
     print("Using CUDA GPU")
 else:
     device = torch.device("cpu")
@@ -163,11 +163,11 @@ def metrics(data_path, solutionFunction, *parameters):
     env = Environment()
     problems = env.load("datasets/n5b5120.pkg")
     batchSize, seqLen = len(problems), len(problems[0])
-    torch.cuda.synchronize()
-    t0 = time.time()
+    torch.cuda.synchronize(device)
+    stime = perf_counter()
     solutions = solutionFunction(problems, *parameters)
-    torch.cuda.synchronize()
-    timeTaken = time.time()-t0
+    torch.cuda.synchronize(device)
+    timeTaken = perf_counter() - stime
     R_routed = [x for x in solutions if x[0] == 1]
     avgR = sum(x[3] for x in solutions)/len(solutions)
     avgRoutedR = sum(x[3] for x in R_routed)/len(R_routed) if len(R_routed) > 0 else 10000
