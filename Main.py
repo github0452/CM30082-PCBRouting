@@ -91,9 +91,9 @@ class TrainTest:
         if self.csv is not None:
             if not os.path.isfile(self.csv['test']):
                 with open(self.csv['test'], 'w', newline='') as file:
-                    csv.writer(file).writerow(["step", "AvgRoutedR", "AvgR", "AvgRouted%", "AvgTime"])
+                    csv.writer(file).writerow(["step", "sampling", "AvgRoutedR", "AvgR", "AvgRouted%", "AvgTime"])
             with open(self.csv['test'], 'a', newline='') as file:
-                csv.writer(file).writerow([self.n_epoch, avgRoutedR, avgR, percRouted, time])
+                csv.writer(file).writerow([self.n_epoch, sample_count, avgRoutedR, avgR, percRouted, time])
         if self.tensor is not None:
             t_board = SummaryWriter(self.tensor)
             t_board.add_scalar('Test/AvgRoutedR', avgRoutedR, global_step = self.n_epoch)
