@@ -3,13 +3,14 @@ N_NODES=(5 8)
 EPOCH = 10
 # for filename in ./runs/configFiles/Transformer-*; do
 for problem_size in "${N_NODES[@]}"; do
-	for filename in finalTraining/*run*-${problem_size}; do
-		tsp python3 Main.py test $filename $EPOCH $problem_size True
+	FILES=("DATA_Testing/SeqLen{$problem_size}-PointerNetwork-config" 
+		"DATA_Testing/SeqLen{$problem_size}-TransformerNetwork-config" 
+		"DATA_Testing/SeqLen{$problem_size}-ImprovementNetwork-config")
+	STEPS=(1 ${problem_size} $(( problem_size*2 )) $(( problem_size*problem_size )))
+	data="datasets/n${problem_size}b5120.pkg"
+	for file_name in "${FILES[@]}"; do
+		for step in "${STEPS[@]}"; do
+			tsp python3 Main.py test $file_name $EPOCH $problem_size True $step $data
+		done
 	done
-	# for filename in finalTraining/config/Transformer-5; do
-	# 	tsp python3 Main.py test $filename $EPOCH $problem_size True
-	# done
-	# for filename in trainingOnOnlyProblemsWithSolutions/config/TSP_improve-6; do
-	# 	tsp python3 Main.py $filename $IMP_EPOCH $problem_size True
-	# done
 done

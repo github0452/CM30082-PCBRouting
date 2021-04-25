@@ -177,9 +177,9 @@ def metrics(solutionFunction, *parameters):
     print("avgReward: {0}, avgRoutedReward: {1}, percRouted: {2}, timeTaken: {3}".format(avgR, avgRoutedR, percRouted, timeTaken))
 
 def runMetrics():
-    # print("Brute force", metrics(Baseline.bruteForce))
-    # print("Random sampling", metrics(Baseline.randomSampling))
-    # print("Nearest neighbour", metrics(Baseline.NN))
+    print("Brute force", metrics(Baseline.bruteForce))
+    print("Random sampling", metrics(Baseline.randomSampling))
+    print("Nearest neighbour", metrics(Baseline.NN))
     print("Routable random hc metrics with 1 restart(s)", metrics(Baseline.RoutableRRHillClimbing))
     print("Routable random hc metrics with 5 restart(s)", metrics(Baseline.RoutableRRHillClimbing, 5))
 

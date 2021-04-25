@@ -33,12 +33,6 @@ class TrainTest:
         if bool(config['save_csv']):
             self.csv = {'train': '{0}/train.csv'.format(data_path),
                 'test': '{0}/test.csv'.format(data_path)}
-            if not os.path.isfile(self.csv['train']):
-                with open(self.csv['train'], 'w', newline='') as file:
-                    csv.writer(file).writerow(["step", "AvgRoutedR", "AvgR", "AvgRouted%", "ActorLoss", "BaselineLoss"])
-            if not os.path.isfile(self.csv['test']):
-                with open(self.csv['test'], 'w', newline='') as file:
-                    csv.writer(file).writerow(["step", "AvgRoutedR", "AvgR", "AvgRouted%", "AvgTime"])
         if bool(config['save_tensor']):
             self.tensor = '{0}/tensor'.format(data_path)
         self.model_name = '{0}/checkpoint'.format(data_path)
@@ -72,6 +66,9 @@ class TrainTest:
             if torch.is_tensor(actor_loss):
                 actor_loss = actor_loss.item()
             if self.csv is not None:
+                if not os.path.isfile(self.csv['train']):
+                    with open(self.csv['train'], 'w', newline='') as file:
+                        csv.writer(file).writerow(["step", "AvgRoutedR", "AvgR", "AvgRouted%", "ActorLoss", "BaselineLoss"])
                 with open(self.csv['train'], 'a', newline='') as file:
                     csv.writer(file).writerow([i, avgRoutedR, avgR, percRouted, actor_loss, baseline_loss])
             if self.tensor is not None:
@@ -93,6 +90,9 @@ class TrainTest:
         percRouted = len(R_routed)*100/self.n_batch_test_size
         time = time/self.n_batch_test_size
         if self.csv is not None:
+            if not os.path.isfile(self.csv['test']):
+                with open(self.csv['test'], 'w', newline='') as file:
+                    csv.writer(file).writerow(["step", "AvgRoutedR", "AvgR", "AvgRouted%", "AvgTime"])
             with open(self.csv['test'], 'a', newline='') as file:
                 csv.writer(file).writerow([self.n_epoch, avgRoutedR, avgR, percRouted, time])
         if self.tensor is not None:
@@ -158,8 +158,10 @@ print("Number of epochs: {0}".format(N_EPOCHS))
 for epoch in range(0, N_EPOCHS):
     print(purpose)
     if purpose == "test":
+        sample_count = bool(sys.argv[6])
+        dataset = sys.argv[7]
         print("TESTING")
-        agent.test(N_NODES)
+        agent.test(N_NODES, path=dataset, sample_count=sample_count)
     elif purpose == "train":
         agent.train(N_NODES)#, path=file)
 # agent.save()

@@ -156,7 +156,7 @@ class TSP_improveWrapped:
         return best_so_far, actor_loss, baseline_loss
 
     # given a batch size and problem size will test the model
-    def test(self, n_batch, p_size, path=None, sample_count=None):
+    def test(self, n_batch, p_size, path=None, sample_count=1):
         problems = self.env.gen(n_batch, p_size) if (path is None) else self.env.load(path, n_batch) # generate or load problems
         problems = torch.tensor(problems, device=self.device, dtype=torch.float)
         # setup inital parameters
@@ -166,7 +166,7 @@ class TSP_improveWrapped:
         best_so_far = torch.tensor(self.env.evaluate(problems, state), device=self.device, dtype=torch.float) #[batch_size]
         exchange = None
         self.actor.eval()
-        for _ in range(0, p_size ** self.T):
+        for _ in range(0, sample_count):
             #pass through model
             _, exchange = self.actor(problems, state, exchange)
             state = self.env.step(state, exchange)

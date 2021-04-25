@@ -9,7 +9,7 @@ import torch
 import random
 import numpy as np
 class Environment:
-    def __init__(self, routableOnly):
+    def __init__(self, routableOnly=False):
         self.routableOnly = routableOnly
 
     def gen(self, list_size, prob_size, routableOnly=True):
@@ -32,6 +32,8 @@ class Environment:
                     problems.append(problem)
             else:
                 invalid += 1
+            if len(problems) % 100 == 0:
+                print("Generated {0} problems".format(len(problems)))
         # print("Invalid problem: {0}, No solution problem: {1}".format(invalid, noSol))
         # randomly shuffling the data to prevent any bias, e.g. if testing later with different problem sizes
         random.shuffle(problems)
@@ -110,9 +112,9 @@ class Improvement(Environment):
 if __name__ == "__main__":
     batchSize = 1
     seqLen = 3
-    env = Construction()
-    problems = env.gen(5120, 5)
-    pickle.dump( problems, open( "n5b5120.pkg", "wb" ) )
+    env = Construction(routableOnly=True)
+    problems = env.gen(5120, 8)
+    pickle.dump( problems, open( "n8b5120.pkg", "wb" ) )
 
     # array = torch.tensor([[0, 1, 2, 3], [0, 1, 2, 3]])
     # valuesToSwap = torch.tensor([[3, 2], [0, 4]])
