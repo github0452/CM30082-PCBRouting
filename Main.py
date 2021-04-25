@@ -165,4 +165,6 @@ for epoch in range(0, N_EPOCHS):
         # agent.load()
     elif purpose == "train":
         agent.train(N_NODES)#, path=file)
-# agent.save()
+        if epoch % 5 == 0:
+            agent.save()
+agent.save()
