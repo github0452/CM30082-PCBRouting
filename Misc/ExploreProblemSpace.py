@@ -175,6 +175,12 @@ def metrics(data_path, solutionFunction, *parameters):
     print("Method: ", solutionFunction.__name__)
     print("batchSize:", batchSize, ", problem size:", seqLen)
     print("avgReward: {0}, avgRoutedReward: {1}, percRouted: {2}, timeTaken: {3}".format(avgR, avgRoutedR, percRouted, timeTaken))
+    file="ExploreProblemSpace.csv"
+    if not os.path.isfile(file):
+        with open(file, 'w', newline='') as file:
+            csv.writer(file).writerow(["Function", "data_path", "AvgRoutedR", "AvgR", "AvgRouted%", "AvgTime"])
+    with open(file, 'a', newline='') as file:
+        csv.writer(file).writerow([solutionFunction.__name__, data_path, avgR, avgRoutedR, percRouted, time])
 
 def runMetrics(data_path):
     print("Brute force", metrics(data_path, Baseline.bruteForce))
