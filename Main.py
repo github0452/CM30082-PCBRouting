@@ -109,8 +109,13 @@ class TrainTest:
         model_dict['n_epoch'] = self.n_epoch
         torch.save(model_dict, path)
 
+    def extract_number(f):
+    s = re.findall("\d+$",f)
+    return (int(s[0]) if s else -1,f)
+
     def load(self):
-        path = "{0}-{1}".format(self.model_name, 1)
+        max(list_of_files,key=extract_number)
+        path = "{0}-{1}".format(self.model_name, 3)
         if os.path.exists(path):
             checkpoint = torch.load(path)
             self.wrapped_actor.load(checkpoint) #load training details
