@@ -72,16 +72,16 @@ class PtrNet(nn.Module):
         n_batch, n_node, _  = problems.size()
         #ENCODE PROBLEM details
         embd_graph = self.L_embedder(problems)
-        enc_states, (initial_h, initial_c) = self.L_encoder(embd_graph) # embd_graph & enc_states, [n_batch, n_node, dim_model]
-        h_c = (initial_h, initial_c) # h & c, [1, n_batch, dim_model]
+        enc_states, h_c = self.L_encoder(embd_graph) # embd_graph & enc_states, [n_batch, n_node, dim_model]
+         # h & c, [1, n_batch, dim_model]
         #setup initial variables
         mask = torch.zeros([n_batch, n_node], device=problems.device).bool()
-        dec_input = self.L_decoder_input.unsqueeze(0).repeat(n_batch, 1) # decoder_input: [n_batch, dim_embedding]
+        logits = self.L_decoder_input.unsqueeze(0).repeat(n_batch, 1) # decoder_input: [n_batch, dim_embedding]
         action_list, action_probs_list = [], [] #action_list and action_probs_list:  (step x [n_batch])
         while (len(action_list) < problems.size(1)):
-            _, h_c = self.L_decoder(dec_input.unsqueeze(1), h_c)
-            query = self.L_glimpse(h_c[0].squeeze(0), enc_states, mask)
-            logits, _ = self.L_pointer(query, enc_states) # logits is the output of the pointer network, the weights associated with each element in the sequence
+            _, h_c = self.L_decoder(logits.unsqueeze(1), h_c)
+            logits = self.L_glimpse(h_c[0].squeeze(0), enc_states, mask)
+            logits, _ = self.L_pointer(logits, enc_states) # logits is the output of the pointer network, the weights associated with each element in the sequence
             logits = logits.masked_fill(mask, float('-inf')) # mask previous actions
             probs = F.softmax(logits, dim=1) #soft max the probabilities
             actions = probs.multinomial(1).squeeze(1) if sampling else probs.argmax(dim = 1) # pick an action, actions: torch.Size([100])
@@ -91,7 +91,7 @@ class PtrNet(nn.Module):
             # action_probs_list.append(probs.gather(0, actions.unsqueeze(dim=1)))
             # update for next loop
             mask = mask.scatter(1, actions.unsqueeze(dim=-1), True)
-            dec_input = embd_graph[[i for i in range(n_batch)], actions, :] # takes the corresponding embeddedGraph[actions]
+            logits = embd_graph[[i for i in range(n_batch)], actions, :] # takes the corresponding embeddedGraph[actions]
         return torch.stack(action_probs_list, dim=1), torch.stack(action_list, dim=1)
 
 class PntrNetCritic(nn.Module):
