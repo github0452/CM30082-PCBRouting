@@ -8,6 +8,7 @@ print("Python version: ", python_version())
 
 #imports
 import os
+import csv
 import copt
 import Environments
 import copy
