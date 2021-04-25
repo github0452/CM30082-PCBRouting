@@ -114,9 +114,9 @@ class Improvement(Environment):
 if __name__ == "__main__":
     batchSize = 1
     seqLen = 3
-    env = Construction(routableOnly=True)
-    problems = env.gen(5120, 8)
-    pickle.dump( problems, open( "n8b5120.pkg", "wb" ) )
+    # env = Construction(routableOnly=True)
+    # problems = env.gen(5120, 8)
+    # pickle.dump( problems, open( "n8b5120.pkg", "wb" ) )
 
     # array = torch.tensor([[0, 1, 2, 3], [0, 1, 2, 3]])
     # valuesToSwap = torch.tensor([[3, 2], [0, 4]])
@@ -152,7 +152,11 @@ if __name__ == "__main__":
     #     problemsv2 = pickle.load( open( file, "rb" ) )
     #     print(problemsv2[0:5])
     #check the loading works
-    # problems = pickle.load( open( "Misc/n5b1000(1).pkg", "rb" ))
+    problems = pickle.load( open( "datasets/n8b5120(2).pkg", "rb" ))
+    B = problems[:len(problems)//2]
+    pickle.dump( B, open( "datasets/n8b5120(2.1).pkg", "wb" ) )
+    C = problems[len(problems)//2:]
+    pickle.dump( C, open( "datasets/n8b5120(2.2).pkg", "wb" ) )
     # print(problems.size())
     # problem_count = problems.size(0)
     # if problem_count < batchSize: #repeat if needed
