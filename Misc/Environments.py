@@ -152,11 +152,12 @@ if __name__ == "__main__":
     #     problemsv2 = pickle.load( open( file, "rb" ) )
     #     print(problemsv2[0:5])
     #check the loading works
-    problems = pickle.load( open( "datasets/n8b5120(2).pkg", "rb" ))
-    B = problems[:len(problems)//2]
-    pickle.dump( B, open( "datasets/n8b5120(2.1).pkg", "wb" ) )
-    C = problems[len(problems)//2:]
-    pickle.dump( C, open( "datasets/n8b5120(2.2).pkg", "wb" ) )
+    problems = pickle.load( open( "datasets/n5b5120.pkg", "rb" ))
+    print(problems[0])
+    # B = problems[:len(problems)//2]
+    # pickle.dump( B, open( "datasets/n8b5120(2.1).pkg", "wb" ) )
+    # C = problems[len(problems)//2:]
+    # pickle.dump( C, open( "datasets/n8b5120(2.2).pkg", "wb" ) )
     # print(problems.size())
     # problem_count = problems.size(0)
     # if problem_count < batchSize: #repeat if needed
