@@ -114,7 +114,7 @@ class TrainTest:
     # return (int(s[0]) if s else -1,f)
 
     def load(self):
-        max(list_of_files,key=extract_number)
+        # max(list_of_files,key=extract_number)
         path = "{0}-{1}".format(self.model_name, 3)
         if os.path.exists(path):
             checkpoint = torch.load(path)
