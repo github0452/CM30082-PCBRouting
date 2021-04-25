@@ -25,7 +25,6 @@ class TrainTest:
         print("using config:", config)
         # check device
         device = torch.device("cuda:5" if torch.cuda.is_available() else "cpu")
-        torch.zeros((1, 1), device=device)
         # setup data stuff
         data_path = config['data_path']
         Path(data_path).mkdir(parents=True, exist_ok=True)
@@ -161,7 +160,7 @@ for epoch in range(0, N_EPOCHS):
         sample_count = bool(sys.argv[6])
         dataset = sys.argv[7]
         print("TESTING")
-        agent.test(N_NODES, path=dataset, sample_count=sample_count)
+        agent.test(N_NODES, prob_path=dataset, sample_count=sample_count)
     elif purpose == "train":
         agent.train(N_NODES)#, path=file)
 # agent.save()
