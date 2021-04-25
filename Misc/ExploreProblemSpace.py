@@ -185,13 +185,18 @@ def metrics(data_path, solutionFunction, *parameters):
         csv.writer(file).writerow([solutionFunction.__name__, data_path, avgR, avgRoutedR, percRouted, timeTaken])
 
 def runMetrics(data_path):
-    print("Brute force", metrics(data_path, Baseline.bruteForce))
-    print("Random sampling", metrics(data_path, Baseline.randomSampling))
-    print("Nearest neighbour", metrics(data_path, Baseline.NN))
-    print("Routable random hc metrics with 1 restart(s)", metrics(data_path, Baseline.RoutableRRHillClimbing))
-    print("Routable random hc metrics with 5 restart(s)", metrics(data_path, Baseline.RoutableRRHillClimbing, 5))
+    for _ in range(10):
+        print("Brute force", metrics(data_path, Baseline.bruteForce))
+    for _ in range(10):
+        print("Random sampling", metrics(data_path, Baseline.randomSampling))
+    for _ in range(10):
+        print("Nearest neighbour", metrics(data_path, Baseline.NN))
+    for _ in range(10):
+        print("Routable random hc metrics with 1 restart(s)", metrics(data_path, Baseline.RoutableRRHillClimbing))
+    for _ in range(10):
+        print("Routable random hc metrics with 5 restart(s)", metrics(data_path, Baseline.RoutableRRHillClimbing, 5))
 
-DATA = ["datasets/n8b5120.pkg"]
+DATA = ["datasets/n5b5120.pkg","datasets/n8b5120.pkg"]
 for data_path in DATA:
     runMetrics(data_path)
 
