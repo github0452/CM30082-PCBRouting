@@ -115,9 +115,9 @@ class TrainTest:
 
     def load(self):
         # max(list_of_files,key=extract_number)
-        path = "{0}-{1}".format(self.model_name, 52)
-        if os.path.exists(path):
-            checkpoint = torch.load(path)
+        # path = "{0}-{1}".format(self.model_name, 55)
+        if os.path.exists(self.model_name):
+            checkpoint = torch.load(self.model_name)
             self.wrapped_actor.load(checkpoint) #load training details
             self.n_epoch = checkpoint['n_epoch']
             print('Loaded with', self.n_epoch, 'epochs.')
