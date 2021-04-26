@@ -187,9 +187,9 @@ def metrics(data_path, solutionFunction, *parameters):
 def runMetrics(data_path):
     # for _ in range(10):
     #     print("Brute force", metrics(data_path, Baseline.bruteForce))
-    for _ in range(10):
-        print("Random sampling", metrics(data_path, Baseline.randomSampling))
-    for _ in range(10):
+    # for _ in range(10):
+    #     print("Random sampling", metrics(data_path, Baseline.randomSampling))
+    for _ in range(6):
         print("Nearest neighbour", metrics(data_path, Baseline.NN))
     for _ in range(10):
         print("Routable random hc metrics with 1 restart(s)", metrics(data_path, Baseline.RoutableRRHillClimbing))
