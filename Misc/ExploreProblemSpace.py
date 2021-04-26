@@ -185,8 +185,8 @@ def metrics(data_path, solutionFunction, *parameters):
         csv.writer(file).writerow([solutionFunction.__name__, data_path, avgR, avgRoutedR, percRouted, timeTaken])
 
 def runMetrics(data_path):
-    for _ in range(10):
-        print("Brute force", metrics(data_path, Baseline.bruteForce))
+    # for _ in range(10):
+    #     print("Brute force", metrics(data_path, Baseline.bruteForce))
     for _ in range(10):
         print("Random sampling", metrics(data_path, Baseline.randomSampling))
     for _ in range(10):
