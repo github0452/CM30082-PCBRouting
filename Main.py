@@ -174,7 +174,11 @@ for epoch in range(0, N_EPOCHS):
         agent.save()
     elif purpose == "generalisation":
         sample_count = 1
-        for i in [3, 4, 5, 6, 7, 8]:
+        for i in [3, 4, 5]:
+            dataset = "datasets/n{0}b5120.pkg".format(i)
+            for _ in range(10):
+                agent.test(i, prob_path=dataset, sample_count=sample_count)
+        for i in [6, 7, 8]:
             dataset = "datasets/n{0}b5120.pkg".format(i)
             for _ in range(10):
                 agent.test(i, prob_path=dataset, sample_count=sample_count)
