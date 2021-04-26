@@ -107,7 +107,7 @@ class TrainTest:
         path = "{0}-{1}".format(self.model_name, self.n_epoch)
         model_dict = self.wrapped_actor.save() #save training details
         model_dict['n_epoch'] = self.n_epoch
-        torch.save(model_dict, path)
+        torch.save(model_dict, self.model_name)
 
     # def extract_number(f):
     # s = re.findall("\d+$",f)
