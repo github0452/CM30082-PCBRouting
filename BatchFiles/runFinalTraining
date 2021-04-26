@@ -3,12 +3,12 @@ N_NODES=(8)
 EPOCH=100
 # for filename in ./runs/configFiles/Transformer-*; do
 for problem_size in "${N_NODES[@]}"; do
-	for filename in finalTraining/config/PointerNetwork-*; do
+	for filename in DATA_Training/config/PointerNetwork-*; do
 		tsp python3 Main.py train $filename $EPOCH $problem_size False
 	done
-	for filename in finalTraining/config/Transformer-*; do
+	for filename in DATA_Training/config/Transformer-*; do
 		tsp python3 Main.py train $filename $EPOCH $problem_size False
 	done
-	for filename in finalTraining/config/TSP_improve-*; do
+	for filename in DATA_Training/config/TSP_improve-*; do
 		tsp python3 Main.py train $filename $EPOCH $problem_size False
 	done
