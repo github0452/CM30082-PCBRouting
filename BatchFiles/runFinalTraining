@@ -1,5 +1,5 @@
 #!/bin/bash
-N_NODES=(8)
+N_NODES=(8) #
 EPOCH=100
 # for filename in ./runs/configFiles/Transformer-*; do
 for problem_size in "${N_NODES[@]}"; do
