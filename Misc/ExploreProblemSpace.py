@@ -193,10 +193,10 @@ def runMetrics(data_path):
         print("Nearest neighbour", metrics(data_path, Baseline.NN))
     for _ in range(10):
         print("Routable random hc metrics with 1 restart(s)", metrics(data_path, Baseline.RoutableRRHillClimbing))
-    for _ in range(10):
-        print("Routable random hc metrics with 5 restart(s)", metrics(data_path, Baseline.RoutableRRHillClimbing, 5))
+    # for _ in range(10):
+        # print("Routable random hc metrics with 5 restart(s)", metrics(data_path, Baseline.RoutableRRHillClimbing, 5))
 
-DATA = ["datasets/n5b5120.pkg","datasets/n8b5120.pkg"]
+DATA = ["datasets/n8b5120.pkg"]
 for data_path in DATA:
     runMetrics(str(data_path))
 
