@@ -172,3 +172,9 @@ for epoch in range(0, N_EPOCHS):
     elif purpose == "train":
         agent.train(N_NODES)#, path=file)
         agent.save()
+    elif purpose == "generalisation":
+        sample_count = int(sys.argv[6])
+        for i in [3, 4, 5, 6, 7, 8]:
+            dataset = "datasets/n{0}b5120.pkg".format(i)
+            for _ in range(10):
+                agent.test(i, prob_path=dataset, sample_count=sample_count)
