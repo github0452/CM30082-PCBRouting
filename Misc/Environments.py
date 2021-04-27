@@ -115,16 +115,17 @@ if __name__ == "__main__":
     batchSize = 1
     seqLen = 3
     env = Construction(routableOnly=True)
-    problems = env.gen(5120, 3)
-    pickle.dump( problems, open( "n3b5120.pkg", "wb" ) )
-    problems = env.gen(5120, 4)
-    pickle.dump( problems, open( "n4b5120.pkg", "wb" ) )
-    problems = env.gen(5120, 6)
-    pickle.dump( problems, open( "n6b5120.pkg", "wb" ) )
-    problems = env.gen(5120, 7)
-    pickle.dump( problems, open( "n7b5120.pkg", "wb" ) )
-    problems = env.gen(5120, 10)
-    pickle.dump( problems, open( "n10b5120.pkg", "wb" ) )
+    # problems = env.gen(5120, 3)
+    # pickle.dump( problems, open( "n3b5120.pkg", "wb" ) )
+    # problems = env.gen(5120, 4)
+    # pickle.dump( problems, open( "n4b5120.pkg", "wb" ) )
+    # problems = env.gen(5120, 6)
+    # pickle.dump( problems, open( "n6b5120.pkg", "wb" ) )
+    # problems = env.gen(5120, 7)
+    # pickle.dump( problems, open( "n7b5120.pkg", "wb" ) )
+    for i in range(10):
+        problems = env.gen(100, 10)
+        pickle.dump( problems, open( "n10b512(1{0}).pkg".format(i), "wb" ) )
 
     # array = torch.tensor([[0, 1, 2, 3], [0, 1, 2, 3]])
     # valuesToSwap = torch.tensor([[3, 2], [0, 4]])
