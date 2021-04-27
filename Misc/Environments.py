@@ -121,11 +121,11 @@ if __name__ == "__main__":
     # pickle.dump( problems, open( "n4b5120.pkg", "wb" ) )
     # problems = env.gen(5120, 6)
     # pickle.dump( problems, open( "n6b5120.pkg", "wb" ) )
-    # problems = env.gen(5120, 7)
-    # pickle.dump( problems, open( "n7b5120.pkg", "wb" ) )
-    for i in range(10):
-        problems = env.gen(100, 10)
-        pickle.dump( problems, open( "n10b512(1{0}).pkg".format(i), "wb" ) )
+    problems = env.gen(5120, 9)
+    pickle.dump( problems, open( "n9b5120.pkg", "wb" ) )
+    # for i in range(10):
+    #     problems = env.gen(100, 10)
+    #     pickle.dump( problems, open( "n10b512(1{0}).pkg".format(i), "wb" ) )
 
     # array = torch.tensor([[0, 1, 2, 3], [0, 1, 2, 3]])
     # valuesToSwap = torch.tensor([[3, 2], [0, 4]])
@@ -161,8 +161,13 @@ if __name__ == "__main__":
     #     problemsv2 = pickle.load( open( file, "rb" ) )
     #     print(problemsv2[0:5])
     #check the loading works
-    problems = pickle.load( open( "datasets/n8b5120(1-4).pkg", "rb" ))
-    print(np.array(problems).shape)
+    # list = []
+    # for i in range(14):
+    #     problems = pickle.load( open( "n10b512({0}).pkg".format(i), "rb" ))
+    #     list.extend(problems)
+    #     print(len(list))
+    # print(np.array(list).shape)
+    # pickle.dump( list, open( "n10b5120.pkg".format(i), "wb" ) )
     # B = problems[:len(problems)//2]
     # pickle.dump( B, open( "datasets/n8b5120(2.1).pkg", "wb" ) )
     # C = problems[len(problems)//2:]
