@@ -24,7 +24,7 @@ class TrainTest:
     def __init__(self, config, routableOnly=False):
         print("using config:", config)
         # check device
-        device = torch.device("cuda:5" if torch.cuda.is_available() else "cpu")
+        device = torch.device("cuda:2" if torch.cuda.is_available() else "cpu")
         # setup data stuff
         data_path = config['data_path']
         Path(data_path).mkdir(parents=True, exist_ok=True)
