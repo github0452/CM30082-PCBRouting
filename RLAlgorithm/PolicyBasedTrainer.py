@@ -11,6 +11,7 @@ from Models.ImprovementTransformer import TSP_improveCritic
 import math
 import random
 import numpy as np
+from time import perf_counter
 
 class ExpMovingAvg:
     def __init__(self, device, baseline_config):
@@ -77,7 +78,7 @@ class Critic:
         self.critic_optimizer.step()
         self.critic_scheduler.step() #DO IN THE LATER LAYER?
         torch.cuda.synchronize(self.device)
-        print("critic backward pass time: "perf_counter() - stime)
+        print("critic backward pass time:{}".format(perf_counter() - stime))
         return critic_loss
 
     def getBaseline(self, problems, states):
@@ -85,7 +86,7 @@ class Critic:
         stime = perf_counter()
         critic_return = self.critic(problems, states.detach())
         torch.cuda.synchronize(self.device)
-        print("critic forward pass time: "perf_counter() - stime)
+        print("critic forward pass time:{}".format(perf_counter() - stime))
         return critic_return
 
     def save(self):
@@ -145,7 +146,7 @@ class Reinforce:
         self.actor_scheduler.step()
         # print("BACKWARDS", prof.key_averages().table(sort_by="self_cpu_time_total"))
         torch.cuda.synchronize(self.device)
-        print("actor backward pass time: "perf_counter() - stime)
+        print("actor backward pass time:{}".format(perf_counter() - stime))
         return actor_loss, baseline_loss
 
     def useBaseline(self, problems, states):

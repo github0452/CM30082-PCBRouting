@@ -137,7 +137,7 @@ class TSP_improveWrapped:
             stime = perf_counter()
             probability, exchange = self.actor(problems, state, exchange)
             torch.cuda.synchronize(self.device)
-            print("actor forward pass time: "perf_counter() - stime)
+            print("actor forward pass time:{}".format(perf_counter() - stime))
             # print("forward", prof.key_averages().table(sort_by="self_cpu_time_total"))
             cost = torch.tensor(self.env.evaluate(problems, state), device=self.device, dtype=torch.float)
             # reward = cost - best_so_far is negatie, otherwise reward = 0

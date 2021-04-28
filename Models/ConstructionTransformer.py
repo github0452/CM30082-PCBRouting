@@ -102,7 +102,7 @@ class TransformerWrapped:
             stime = perf_counter()
             action_probs_list, action_list = self.actor(problems, sampling=True)
             torch.cuda.synchronize(self.device)
-            print("actor forward pass time: "perf_counter() - stime)
+            print("actor forward pass time:{}".format(perf_counter() - stime))
             # print("forward", prof.key_averages().table(sort_by="self_cpu_time_total"))
             # use this to train
             # with torch.autograd.profiler.profile(use_cuda=True, profile_memory=True, with_stack=True) as prof:
