@@ -141,9 +141,11 @@ class PtrNetWrapped: #wrapper for model
         problems = torch.tensor(problems, device=self.device, dtype=torch.float)
         # run through the model
         self.actor.train()
-        # with torch.autograd.profiler.profile(use_cuda=True, profile_memory=True, with_stack=True) as prof:
+        torch.cuda.synchronize(self.device)
+        stime = perf_counter()
         action_probs_list, action_list = self.actor(problems, sampling=True) #action_probs_list (n_node x [n_batch])
-        # print("forward", prof.key_averages().table(sort_by="self_cpu_time_total"))
+        torch.cuda.synchronize(self.device)
+        print("actor forward pass time: "perf_counter() - stime)
         # calculate reward and probability
         reward = torch.tensor(self.env.evaluate(problems, action_list), device=self.device, dtype=torch.float)
         # with torch.autograd.profiler.profile(use_cuda=True, profile_memory=True, with_stack=True) as prof:

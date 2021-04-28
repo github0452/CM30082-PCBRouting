@@ -68,16 +68,24 @@ class Critic:
 
     def train(self, pred_return, true_return):
         # train critic
+        torch.cuda.synchronize(self.device)
+        stime = perf_counter()
         critic_loss = self.critic_mse_loss(pred_return, true_return.detach())
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
         torch.nn.utils.clip_grad_norm_(self.critic.parameters(), self.max_g, norm_type=2) # to prevent gradient expansion, set max
         self.critic_optimizer.step()
         self.critic_scheduler.step() #DO IN THE LATER LAYER?
+        torch.cuda.synchronize(self.device)
+        print("critic backward pass time: "perf_counter() - stime)
         return critic_loss
 
     def getBaseline(self, problems, states):
+        torch.cuda.synchronize(self.device)
+        stime = perf_counter()
         critic_return = self.critic(problems, states.detach())
+        torch.cuda.synchronize(self.device)
+        print("critic forward pass time: "perf_counter() - stime)
         return critic_return
 
     def save(self):
@@ -127,6 +135,8 @@ class Reinforce:
         # train the baseline
         baseline_loss = self.baseline.train(baseline.reshape(-1), returns.reshape(-1))
         # train the actor - update the weights using optimiser
+        torch.cuda.synchronize(self.device)
+        stime = perf_counter()
         self.actor_optimizer.zero_grad()
         # with torch.autograd.profiler.profile(use_cuda=True, profile_memory=True, with_stack=True) as prof:
         actor_loss.backward() # calculate gradient backpropagation
@@ -134,6 +144,8 @@ class Reinforce:
         self.actor_optimizer.step() # update weights
         self.actor_scheduler.step()
         # print("BACKWARDS", prof.key_averages().table(sort_by="self_cpu_time_total"))
+        torch.cuda.synchronize(self.device)
+        print("actor backward pass time: "perf_counter() - stime)
         return actor_loss, baseline_loss
 
     def useBaseline(self, problems, states):
