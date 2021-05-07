@@ -1,14 +1,18 @@
-import Misc.copt as copt
-# import copt
+import sys
+import os
+import pickle
+
+try:
+  import Misc.copt as copt
+except ImportError:
+  import copt
 # import Baselines
 import torch
 import random
 import numpy as np
-import pickle
-
 class Environment:
-    def __init__(self):
-        pass
+    def __init__(self, routableOnly=False):
+        self.routableOnly = routableOnly
 
     def gen(self, list_size, prob_size, routableOnly=True):
         problems = []
@@ -21,22 +25,30 @@ class Environment:
                 and (np.linalg.norm(np.subtract(x, y)[:2],2) < 30
                 or np.linalg.norm(np.subtract(x, y)[2:],2) < 30) ])
             if (invalidPointNo == 0):
-                if (routableOnly and len(copt.bruteForce(problem, 1)) != 0) or not routableOnly:
-                    problems.append(problem)
+                if self.routableOnly:
+                    if len(copt.bruteForce(problem, 1)) != 0:
+                        problems.append(problem)
+                    else:
+                        noSol += 1
                 else:
-                    noSol += 1
+                    problems.append(problem)
             else:
                 invalid += 1
-        print("Invalid problem: {0}, No solution problem: {1}".format(invalid, noSol))
-        random.shuffle(problems) # randomly shuffling the data to prevent any bias, e.g. if testing later with different problem sizes
-        return torch.FloatTensor(problems)
+            if len(problems) % 100 == 0:
+                print("Generated {0} problems".format(len(problems)))
+        # print("Invalid problem: {0}, No solution problem: {1}".format(invalid, noSol))
+        # randomly shuffling the data to prevent any bias, e.g. if testing later with different problem sizes
+        random.shuffle(problems)
+        return problems
 
     # problems: torch.Size([100, 5, 4]), orders [5, 100]
-    def evaluate(self, problems, orders, additional=None):
+    def evaluate(self, problems, orders):
         #convert everything to the right format
         n_node = problems.size(1)
-        orders = orders.tolist()
-        problems = [[tuple(element) for element in problem] for problem in problems.tolist()]
+        if torch.is_tensor(orders):
+            orders = orders.tolist()
+        if torch.is_tensor(problems):
+            problems = [[tuple(element) for element in problem] for problem in problems.tolist()]
         reward = []
         i = 0
         for problem,order in zip(problems, orders):
@@ -48,17 +60,17 @@ class Environment:
                     reward.append(eval["measure"]/n_node)
             else:
                 reward.append(0)
-        # print(reward[0:10])
-        # print(torch.Tensor(reward[0:10]))
-        return torch.Tensor(reward)
+        # reward = torch.as_tensor(reward, device=device)
+        return reward
 
-    def load(self, path, batch_size):
+    def load(self, path, batch_size=None):
         problems = pickle.load( open( path, "rb" ))
-        problem_count = problems.size(0)
-        if problem_count < batch_size: #repeat if needed
-            multiply = -(-batch_size // problem_count)
-            problems = problems.repeat(multiply, 1, 1)
-        problems = problems[:batch_size] #trim
+        # if batch_size is not None:
+        #     problem_count = len(problems)
+        #     if problem_count < batch_size: #repeat if needed
+        #         multiply = -(-batch_size // problem_count)
+        #         problems = problems.repeat(multiply, 1, 1)
+        #     problems = problems[:batch_size] #trim
         return problems
 
 class Construction(Environment):
@@ -76,17 +88,14 @@ class Construction(Environment):
         return (cur_state.size(1) == problems.size(1))
 
 class Improvement(Environment):
-    def __init__(self):
-        pass
-
-    def getStartingState(self, list_size, prob_size):
-        initial_solution = torch.linspace(0, prob_size-1, steps=prob_size).expand(list_size, prob_size)
+    def getStartingState(self, list_size, prob_size, device):
+        initial_solution = torch.linspace(0, prob_size-1, steps=prob_size, device=device).expand(list_size, prob_size)
         return initial_solution
 
     # cur_state: [n_batch, n_nodes]
     def step(self, cur_state, step):
-        step_np = step.clone().cpu().numpy()
-        state_np = cur_state.clone().cpu().numpy()
+        step_np = step.cpu().numpy()
+        state_np = cur_state.cpu().numpy()
         for action, state in zip(step_np, state_np):
             a_1 = np.where(state == action[0])[0][0]
             a_2 = np.where(state == action[1])[0][0]
@@ -96,7 +105,8 @@ class Improvement(Environment):
                 temp = state[a_1]
                 state[a_1] = state[a_2]
                 state[a_2] = temp
-        return torch.tensor(state_np).to(cur_state.device)
+        state_np = torch.as_tensor(state_np, device=cur_state.device)
+        return state_np
 
     def isDone(self):
         pass
@@ -104,22 +114,33 @@ class Improvement(Environment):
 if __name__ == "__main__":
     batchSize = 1
     seqLen = 3
-    env = Construction()
+    env = Construction(routableOnly=True)
+    # problems = env.gen(5120, 3)
+    # pickle.dump( problems, open( "n3b5120.pkg", "wb" ) )
+    # problems = env.gen(5120, 4)
+    # pickle.dump( problems, open( "n4b5120.pkg", "wb" ) )
+    # problems = env.gen(5120, 6)
+    # pickle.dump( problems, open( "n6b5120.pkg", "wb" ) )
+    problems = env.gen(5120, 9)
+    pickle.dump( problems, open( "n9b5120.pkg", "wb" ) )
+    # for i in range(10):
+    #     problems = env.gen(100, 10)
+    #     pickle.dump( problems, open( "n10b512(1{0}).pkg".format(i), "wb" ) )
 
-    array = torch.tensor([[0, 1, 2, 3], [0, 1, 2, 3]])
-    valuesToSwap = torch.tensor([[3, 2], [0, 4]])
-
-    step_np = valuesToSwap.clone().cpu().numpy()
-    state_np = array.clone().cpu().numpy()
-    state_np = np.insert(state_np, 0, -1, axis=1)
-    for action, state_row in zip(step_np, state_np):
-        a_1 = np.where(state_row == action[0])[0][0]
-        state_row[0:a_1-1] = state_row[1:a_1]
-        state_row[a_1-1] = action[1]
-    # for i in range(array.size(dim=0)):
+    # array = torch.tensor([[0, 1, 2, 3], [0, 1, 2, 3]])
+    # valuesToSwap = torch.tensor([[3, 2], [0, 4]])
     #
-    #     print(np.insert(state_np, [i, a_1], step_np[i][1]))
-    print(torch.tensor(state_np))
+    # step_np = valuesToSwap.clone().cpu().numpy()
+    # state_np = array.clone().cpu().numpy()
+    # state_np = np.insert(state_np, 0, -1, axis=1)
+    # for action, state_row in zip(step_np, state_np):
+    #     a_1 = np.where(state_row == action[0])[0][0]
+    #     state_row[0:a_1-1] = state_row[1:a_1]
+    #     state_row[a_1-1] = action[1]
+    # # for i in range(array.size(dim=0)):
+    # #
+    # #     print(np.insert(state_np, [i, a_1], step_np[i][1]))
+    # print(torch.tensor(state_np))
     #experimenting with steps
     # problems = torch.Tensor(env.genProblems(batchSize, seqLen))
     # state = None
@@ -140,7 +161,17 @@ if __name__ == "__main__":
     #     problemsv2 = pickle.load( open( file, "rb" ) )
     #     print(problemsv2[0:5])
     #check the loading works
-    # problems = pickle.load( open( "Misc/n5b1000(1).pkg", "rb" ))
+    # list = []
+    # for i in range(14):
+    #     problems = pickle.load( open( "n10b512({0}).pkg".format(i), "rb" ))
+    #     list.extend(problems)
+    #     print(len(list))
+    # print(np.array(list).shape)
+    # pickle.dump( list, open( "n10b5120.pkg".format(i), "wb" ) )
+    # B = problems[:len(problems)//2]
+    # pickle.dump( B, open( "datasets/n8b5120(2.1).pkg", "wb" ) )
+    # C = problems[len(problems)//2:]
+    # pickle.dump( C, open( "datasets/n8b5120(2.2).pkg", "wb" ) )
     # print(problems.size())
     # problem_count = problems.size(0)
     # if problem_count < batchSize: #repeat if needed

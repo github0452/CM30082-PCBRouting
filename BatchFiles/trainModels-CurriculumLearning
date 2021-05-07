@@ -1,0 +1,14 @@
+#!/bin/bash
+# TRAINING CURRICULUM LEARNING
+N_NODES=(5 8) #
+MODELS=("Pointer" "Transformer" "Improvement")
+EPOCH=50
+P_SIZE=5
+P_TRAIN=8
+FILTER_NO_SOL=True
+# for filename in ./runs/configFiles/Transformer-*; do
+for model in "${MODELS[@]}"; do
+	folder_name="runs/CurriculumLearning/${P_SIZE}${model}"
+	config_name="runs/CurriculumLearning/${model}-config"
+	tsp python3 main.py train $config_name $folder_name $EPOCH $P_TRAIN $FILTER_NO_SOL
+done

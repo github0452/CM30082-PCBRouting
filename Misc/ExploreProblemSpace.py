@@ -4,12 +4,16 @@
 #Check python version
 from platform import python_version
 print("Python version: ", python_version())
-assert python_version() == "3.7.9"
+# assert python_version() == "3.7.9"
 
 #imports
+import os
+import csv
 import copt
 import Environments
 import copy
+from time import perf_counter
+import itertools
 
 #torch stuff
 import torch
@@ -27,7 +31,7 @@ from Environments import Environment
 
 # if gpu is to be used
 if torch.cuda.is_available():
-    device = torch.device("cuda:0")
+    device = torch.device("cuda:5")
     print("Using CUDA GPU")
 else:
     device = torch.device("cpu")
@@ -61,11 +65,8 @@ print(torch.__version__)
 # time taken
 # solution quality
 # solution % routed
-class Baselines:
-    def __init__(self):
-        self.device = None
-
-    def bruteForce(self, problems, earlyExit=0):
+class Baseline:
+    def bruteForce(problems, earlyExit=0):
         solutions = []
         for problem in problems:
             results = copt.bruteForce(problem, earlyExit)
@@ -77,7 +78,7 @@ class Baselines:
             solutions.append(solution)
         return solutions
 
-    def randomSampling(self, problems):
+    def randomSampling(problems):
         solutions = []
         for problem in problems:
             seqLen = len(problem)
@@ -87,7 +88,7 @@ class Baselines:
             solutions.append(solution)
         return solutions
 
-    def NN(self, problems):
+    def NN(problems):
         solutions = []
         for problem in problems:
             seqLen = len(problem)
@@ -111,7 +112,7 @@ class Baselines:
             solutions.append(solution)
         return solutions
 
-    def RoutableRRHillClimbing(self, problems, numRestarts=1):
+    def RoutableRRHillClimbing(problems, numRestarts=1):
         solutions = []
         # for each problem
         for problem in problems:
@@ -159,124 +160,82 @@ class Baselines:
             solutions.append(bestRestartSolution)
         return solutions
 
-    def simulatedAnnealing(self, problems):
-        pass
-
-    def tabuSearch(self, problems):
-        pass
-
-
 # solutions: (isSuccessfullyRouted, numPointsRouted, order, measure)
-def metrics(problems, TENSORBOARD_write, solutionFunction, *parameters):
-    batchSize = len(problems)
-    seqLen = len(problems[0])
-    start = time.perf_counter()
+def metrics(data_path, solutionFunction, *parameters):
+    env = Environment()
+    problems = env.load(data_path)
+    batchSize, seqLen = len(problems), len(problems[0])
+    torch.cuda.synchronize(device)
+    stime = perf_counter()
     solutions = solutionFunction(problems, *parameters)
-    end = time.perf_counter()
-    routedSolutions = [x for x in solutions if x[0] == 1]
-    percRouted = len(routedSolutions)*100/len(solutions)
-    if percRouted > 0:
-        routedSolutionQual = sum([x[3] for x in routedSolutions])/len(routedSolutions)
-        routedSolutionQualPerElement = routedSolutionQual/seqLen
-    else:
-        routedSolutionQual = 10000
-        routedSolutionQualPerElement = 10000
-    timeTaken = (end-start)/batchSize
-    TENSORBOARD_write.add_hparams({'method': solutionFunction.__name__, 'batchSize': batchSize, 'problem size': seqLen},
-        {'avgRouted': percRouted, 'avgRReward': routedSolutionQual, 'avgRRewardPerElement': routedSolutionQualPerElement, 'time': timeTaken})
-    return percRouted, routedSolutionQual, routedSolutionQualPerElement, timeTaken
+    torch.cuda.synchronize(device)
+    timeTaken = perf_counter() - stime
+    R_routed = [x for x in solutions if x[0] == 1]
+    avgR = sum(x[3] for x in solutions)/len(solutions)
+    avgRoutedR = sum(x[3] for x in R_routed)/len(R_routed) if len(R_routed) > 0 else 10000
+    percRouted = len(R_routed)*100/len(solutions)
+    print("Method: ", solutionFunction.__name__)
+    print("batchSize:", batchSize, ", problem size:", seqLen)
+    print("avgReward: {0}, avgRoutedReward: {1}, percRouted: {2}, timeTaken: {3}".format(avgR, avgRoutedR, percRouted, timeTaken))
+    file="ExploreProblemSpace.csv"
+    if not os.path.isfile(file):
+        with open(file, 'w', newline='') as file:
+            csv.writer(file).writerow(["Function", "data_path", "AvgRoutedR", "AvgR", "AvgRouted%", "AvgTime"])
+    with open(file, 'a', newline='') as file:
+        csv.writer(file).writerow([solutionFunction.__name__, data_path, avgR, avgRoutedR, percRouted, timeTaken])
 
-def runMetrics(batch_size, n_node, TENSORBOARD_write):
-    baseline = Baselines()
-    problems = Environments.genProblemList(batch_size, n_node)
-    print("=-=-=-=-=-=Batch size: ", batch_size, ",seq len: ", n_node, "=-=-=-=-=-=")
-    print("Brute force", metrics(problems, TENSORBOARD_write, baseline.bruteForce))
-    print("Random sampling", metrics(problems, TENSORBOARD_write, baseline.randomSampling))
-    print("Nearest neighbour", metrics(problems, TENSORBOARD_write, baseline.NN))
-    print("Routable random hc metrics with 1 restart(s)", metrics(problems, TENSORBOARD_write, baseline.RoutableRRHillClimbing))
-    print("Routable random hc metrics with 5 restart(s)", metrics(problems, TENSORBOARD_write, baseline.RoutableRRHillClimbing, 5))
+def runMetrics(data_path):
+    # for _ in range(10):
+    #     print("Brute force", metrics(data_path, Baseline.bruteForce))
+    # for _ in range(10):
+    #     print("Random sampling", metrics(data_path, Baseline.randomSampling))
+    for _ in range(6):
+        print("Nearest neighbour", metrics(data_path, Baseline.NN))
+    for _ in range(10):
+        print("Routable random hc metrics with 1 restart(s)", metrics(data_path, Baseline.RoutableRRHillClimbing))
+    # for _ in range(10):
+        # print("Routable random hc metrics with 5 restart(s)", metrics(data_path, Baseline.RoutableRRHillClimbing, 5))
 
-def test(batchSize, seqLen):
-    routingDistribution = {}
-    average = 0
-    averageCount = 0
-    possibleSolutions = math.factorial(seqLen)
-    numSuccessiveRouting = 0
-    numPossibleSolutions = 0
-    # miniBatch = 10000
-    # batchCount = int(batchSize/10000)
-    # for i in range(batchCount):
-        # print("Batch ", i)
-    problems = Environments.genProblemList(batchSize, seqLen)
-    for problem in problems:
-        # print("=-=-=-=-=Problems ", averageCount, "=-=-=-=-=-=")
-        results = copt.bruteForce(problem)
-        # (eval['success'], eval['nRouted'], eval['order'], eval['measure'])
-        successiveRouting = [eval['measure']/seqLen for eval in results]
-        percRouted = (len(successiveRouting)/possibleSolutions)*100
-        numSuccessiveRouting += len(successiveRouting)
-        numPossibleSolutions += possibleSolutions
-        counts = Counter(successiveRouting)
-        # update average
-        averageCount += 1
-        average += (percRouted-average)/averageCount
-        routingDistribution.update(counts)
-        # print("Routing dict: ",counts)
-        # print("Percentage routed: ",percRouted,"%")
-    print("=-=-=-=-=Average for problem size", seqLen,"batch size",batchSize,"=-=-=-=-=-=-=")
-    print("Average routed: ",average,"%")
-    keys = list(routingDistribution.keys())
-    keys.sort()
-    values = [routingDistribution[key] for key in keys]
-    averageValue = sum([value*key for value,key in zip(values, keys)])/sum(values)
-    print("Number of solutions ", numSuccessiveRouting)
-    print("Number of possible solutions ", numPossibleSolutions)
-    print("Average value: ",averageValue)
-    plt.plot(keys, values)
-    # plt.bar(routingDistribution.keys(), routingDistribution.values())
-    plt.show()
-#metrics
-# - quality of routed solutions
-# - % routed
+DATA = ["datasets/n8b5120.pkg"]
+for data_path in DATA:
+    runMetrics(str(data_path))
 
-# main only code
-# if __name__ == "__main__":
-#     TENSOR_BOARD_DATA = f'runs/MNIST/SolutionSpace'
-#     TENSORBOARD_write = SummaryWriter(TENSOR_BOARD_DATA)
-#     routed_perc = [92.37, 74.498, 60.192, 39.123, 18.478, 6.387, 1.383, 0.237, 0.025]
-#     num_solution = [2, 6, 24, 120, 720, 5040, 40320, 362880, 3628800]
-#     average_value = [1074.42, 1089.88, 1105.90, 1122.35, 1136.87, 1147.91, 1154.10, 1159.41, 1164.97]
-#     step = 8
-#     for i in range(7, len(routed_perc)):
-#         print(step, routed_perc[i], num_solution[i], average_value[i])
-#         TENSORBOARD_write.add_scalar('SolutionSpace/AverageRouted%', routed_perc[i], global_step = step)
-#         TENSORBOARD_write.add_scalar('SolutionSpace/SolutionSpaceSize', num_solution[i], global_step = step)
-#         TENSORBOARD_write.add_scalar('SolutionSpace/AverageValuePerPointForRoutedSolutions', average_value[i], global_step = step)
-#         step += 1
-    # Counter(words).keys() # equals to list(set(words))
-    # Counter(words).values() # counts the elements' frequency
-    # runMetrics(100, 2, TENSORBOARD_write)
-    # runMetrics(100, 3, TENSORBOARD_write)
-    # runMetrics(100, 4, TENSORBOARD_write)
-    # runMetrics(100, 5, TENSORBOARD_write)
-    # runMetrics(100, 6, TENSORBOARD_write)
-    # runMetrics(100, 7, TENSORBOARD_write)
-    # runMetrics(100, 8, TENSORBOARD_write)
-    # runMetrics(100, 9, TENSORBOARD_write)
-    # runMetrics(100, 10, TENSORBOARD_write)
-
-batchSize = 5
-prob_size = 7
-for i in range(batchSize):
-    # print("=-=-=-=-=Problems ", averageCount, "=-=-=-=-=-=")
-    problem = copt.getProblem(prob_size) #generate problem
-    # check the problem is valid
-    invalidPointNo = len([ 1 for x in problem for y in problem if x != y
-        and (np.linalg.norm(np.subtract(x, y)[:2],2) < 30
-        or np.linalg.norm(np.subtract(x, y)[2:],2) < 30) ])
-    if (invalidPointNo == 0):
-        results = copt.bruteForce(problem)
-        results = [(x['measure'], x['order']) for x in results]
-        print(results)
-    else:
-        print("invalid")
+# def test(batchSize, seqLen):
+#     routingDistribution = {}
+#     average = 0
+#     averageCount = 0
+#     possibleSolutions = math.factorial(seqLen)
+#     numSuccessiveRouting = 0
+#     numPossibleSolutions = 0
+#     # miniBatch = 10000
+#     # batchCount = int(batchSize/10000)
+#     # for i in range(batchCount):
+#         # print("Batch ", i)
+#     problems = Environments.gen(batchSize, seqLen)
+#     for problem in problems:
+#         # print("=-=-=-=-=Problems ", averageCount, "=-=-=-=-=-=")
+#         results = copt.bruteForce(problem)
+#         # (eval['success'], eval['nRouted'], eval['order'], eval['measure'])
+#         successiveRouting = [eval['measure']/seqLen for eval in results]
+#         percRouted = (len(successiveRouting)/possibleSolutions)*100
+#         numSuccessiveRouting += len(successiveRouting)
+#         numPossibleSolutions += possibleSolutions
+#         counts = Counter(successiveRouting)
+#         # update average
+#         averageCount += 1
+#         average += (percRouted-average)/averageCount
+#         routingDistribution.update(counts)
+#         # print("Routing dict: ",counts)
+#         # print("Percentage routed: ",percRouted,"%")
+#     print("=-=-=-=-=Average for problem size", seqLen,"batch size",batchSize,"=-=-=-=-=-=-=")
+#     print("Average routed: ",average,"%")
+#     keys = list(routingDistribution.keys())
+#     keys.sort()
+#     values = [routingDistribution[key] for key in keys]
+#     averageValue = sum([value*key for value,key in zip(values, keys)])/sum(values)
+#     print("Number of solutions ", numSuccessiveRouting)
+#     print("Number of possible solutions ", numPossibleSolutions)
+#     print("Average value: ",averageValue)
+#     plt.plot(keys, values)
+#     # plt.bar(routingDistribution.keys(), routingDistribution.values())
+#     plt.show()

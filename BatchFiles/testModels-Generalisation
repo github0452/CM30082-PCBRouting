@@ -1,0 +1,19 @@
+#!/bin/bash
+N_NODES=(8) #
+MODELS=("Pointer" "Transformer" "Improvement")
+EPOCH=10
+FILTER_NO_SOL=True
+# for filename in ./runs/configFiles/Transformer-*; do
+for p_size in "${N_NODES[@]}"; do
+	for p_test in {3..9}; do
+		SAMPLING=${p_test}
+		for model in "${MODELS[@]}"; do
+			for sample in "${SAMPLING[@]}"; do
+				folder_name="runs/Testing2/${p_size}${model}"
+				config_name="runs/Testing2/${model}-config"
+				dataset_name="datasets/n${p_test}b5120.pkg"
+				tsp python3 main.py test $config_name $folder_name $EPOCH $p_test $FILTER_NO_SOL $sample $dataset_name
+			done
+		done
+	done
+done

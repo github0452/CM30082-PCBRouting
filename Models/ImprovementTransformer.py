@@ -5,6 +5,7 @@ import torch.nn.functional as F
 
 import numpy as np
 import math
+from time import perf_counter
 
 from Models.GeneralLayers import GraphEmbedding, SkipConnection, MultiHeadAttention, FeedForward, TransformerEncoderL
 
@@ -16,7 +17,6 @@ class Compatability(nn.Module):
         self.W_key = nn.Parameter(torch.Tensor(dim_model, self.n_heads*dim_key))
         self.init_params() # initialise parameters
 
-
     def init_params(self):
         for param in self.parameters():
             stdv = 1. / math.sqrt(param.size(-1))
@@ -26,35 +26,31 @@ class Compatability(nn.Module):
         ref = query.clone()
         batch_size, n_node, input_dim = ref.size()
         n_query = query.size(1)
-        qflat = query.contiguous().view(-1, input_dim)
-        refFlat = ref.contiguous().view(-1, input_dim)
         # last dimension can be different for keys and values
         shp = (self.n_heads, batch_size, n_node, -1)
         shp_q = (self.n_heads, batch_size, n_query, -1)
-        Q = torch.matmul(qflat, self.W_query).view(shp_q)
-        K = torch.matmul(refFlat, self.W_key).view(shp)
-        compatability_raw = torch.matmul(Q, K.transpose(2, 3)).squeeze(0)
-        # compatability = torch.tanh(compatability_raw) * 10.0
-        compatability = compatability_raw
+        Q = torch.matmul(query.contiguous().view(-1, input_dim), self.W_query).view(shp_q)
+        K = torch.matmul(ref.contiguous().view(-1, input_dim), self.W_key).view(shp)
+        compatability = torch.matmul(Q, K.transpose(2, 3)).squeeze(0)
+        # compatability = torch.tanh(compatability) * 10.0
         # mask pointless options and previous exchange
-        pointless = torch.eye(n_node).repeat(batch_size, 1, 1).to(compatability_raw.device)
-        compatability[pointless.bool()] = -np.inf
+        compatability[torch.eye(n_node, device=compatability.device).repeat(batch_size, 1, 1).bool()] = -np.inf
         if prev_exchange is not None:
             compatability[torch.arange(batch_size), prev_exchange[:,0], prev_exchange[:,1]] = -np.inf
             compatability[torch.arange(batch_size), prev_exchange[:,1], prev_exchange[:,0]] = -np.inf
-        c = compatability.view(batch_size, -1)
-        logits = F.softmax(c, dim=-1)
+        compatability = compatability.view(batch_size, -1)
+        logits = F.softmax(compatability, dim=-1)
         return logits
 
 class TSP_improve(nn.Module):
     def __init__(self, model_config):
         super().__init__() #initialise nn.Modules
-        dim_model = int(model_config['dim_model'])
-        dim_hidden = int(model_config['dim_hidden'])
-        dim_k = int(model_config['dim_k'])
-        dim_v = int(model_config['dim_v'])
-        n_layers = int(model_config['n_layers'])
-        n_head = int(model_config['n_head'])
+        dim_model = int(model_config['i_dim_model'])
+        dim_hidden = int(model_config['i_dim_hidden'])
+        dim_v = int(model_config['i_dim_v'])
+        dim_k = dim_v
+        n_layers = int(model_config['i_n_layers'])
+        n_head = int(model_config['i_n_head'])
         self.L_embedder = GraphEmbedding(dim_model, usePosEncoding=True)
         self.L_encoder = nn.Sequential(*(TransformerEncoderL(n_head, dim_model, dim_hidden, dim_k, dim_v) for _ in range(n_layers)))
         self.L_project_graph = nn.Linear(dim_model, dim_model, bias=False)
@@ -83,17 +79,20 @@ class TSP_improve(nn.Module):
 class TSP_improveCritic(nn.Module):
     def __init__(self, model_config):
         super().__init__() #initialise nn.Modules
-        dim_model = int(model_config['dim_model'])
-        dim_hidden = int(model_config['dim_hidden'])
-        dim_k = int(model_config['dim_k'])
-        dim_v = int(model_config['dim_v'])
-        n_layers = int(model_config['n_layers'])
-        n_head = int(model_config['n_head'])
+        dim_model = int(model_config['i_dim_model'])
+        dim_hidden = int(model_config['i_dim_hidden'])
+        dim_v = int(model_config['i_dim_v'])
+        dim_k = dim_v
+        n_layers = int(model_config['i_n_layers'])
+        n_head = int(model_config['i_n_head'])
         self.L_embedder = GraphEmbedding(dim_model, usePosEncoding=True)
         self.L_encoder = nn.Sequential(*(TransformerEncoderL(n_head, dim_model, dim_hidden, dim_k, dim_v) for _ in range(n_layers)))
         self.L_project_graph = nn.Linear(dim_model, dim_model, bias=False)
         self.L_project_node = nn.Linear(dim_model, dim_model, bias=False)
-        self.L_decoder = FeedForward(dim_model, dim_hidden, 1)
+        self.L_decoder = nn.Sequential(
+                    nn.Linear(dim_model, dim_hidden, bias = False),
+			        nn.ReLU(inplace = False),
+                    nn.Linear(dim_hidden, 1, bias = False))
 
     def forward(self, problems, solution_indexes):
         n_node = problems.size(1)
@@ -109,85 +108,91 @@ class TSP_improveCritic(nn.Module):
         return value
 
 class TSP_improveWrapped:
-    def __init__(self, env, trainer, device, model_config, optimizer_config):
+    def __init__(self, env, trainer, device, config):
         self.env = env
         self.trainer = trainer
         self.device = device
-        self.actor = TSP_improve(model_config).to(self.device)
-        self.trainer.passIntoParameters(self.actor.parameters(), optimizer_config)
-        self.T = int(optimizer_config['T'])
+        self.actor = TSP_improve(config).to(self.device)
+        self.trainer.passIntoParameters(self.actor.parameters(), config)
+        self.T = int(config['t'])
 
     # given a problem size and batch size will train the model
-    def train_batch(self, n_batch, p_size, path=None):
-        problems = self.env.gen(n_batch, p_size).to(self.device) if (path is None) else self.env.load(path, n_batch).to(self.device) # generate or load problems
+    def train_batch(self, n_batch, p_size, path=None, start_s=None):
+        # with torch.autograd.profiler.profile(use_cuda=True, profile_memory=True, with_stack=True) as prof:
+        problems = self.env.gen(n_batch, p_size) if (path is None) else self.env.load(path, n_batch) # generate or load problems
+        problems = torch.tensor(problems, device=self.device, dtype=torch.float)
         # setup inital parameters
-        state = self.env.getStartingState(n_batch, p_size).to(self.device)
-        best_so_far = self.env.evaluate(problems, state).to(self.device)
-        initial_result = best_so_far.clone()
+        if start_s is not None:
+            state = start_s
+        else:
+            state = self.env.getStartingState(n_batch, p_size, self.device)
+        best_so_far = torch.tensor(self.env.evaluate(problems, state), device=self.device, dtype=torch.float)
+        # print(prof.key_averages().table(sort_by="self_cpu_time_total"))
         exchange = None
         # tracking stuff for information
-        action_history = [] #INFO
         state_history = []
         reward_history = [] #INFO
         prob_history = []
         # run through the model
-        t = 0
         self.actor.train()
-        while t < self.T:
-            with torch.autograd.set_detect_anomaly(True):
-                probability, exchange = self.actor(problems, state, exchange)
-            next_state = self.env.step(state, exchange)
-            # calculate reward
-            cost = self.env.evaluate(problems, next_state).to(self.device)
+        for _ in range(p_size ** self.T):
+            torch.cuda.synchronize(self.device)
+            stime = perf_counter()
+            probability, exchange = self.actor(problems, state, exchange)
+            torch.cuda.synchronize(self.device)
+            print("actor forward pass time:{}".format(perf_counter() - stime))
+            # print("forward", prof.key_averages().table(sort_by="self_cpu_time_total"))
+            cost = torch.tensor(self.env.evaluate(problems, state), device=self.device, dtype=torch.float)
+            # reward = cost - best_so_far is negatie, otherwise reward = 0
             best_for_now = torch.cat((best_so_far[None, :], cost[None, :]), 0).min(0)[0]
-            #save things
-            reward_history.append(best_for_now - best_so_far)
-            action_history.append(exchange)
-            state_history.append(next_state)
+            state = self.env.step(state, exchange)
+            state_history.append(state)
             prob_history.append(probability)
-            #update for next iteration
-            state = next_state
+            reward_history.append(best_for_now - best_so_far)
             best_so_far = best_for_now
-            t += 1
-        # train
-        # Get discounted R
-        flipped_returns = []
-        reward_reversed = reward_history[::-1]
-        next_return = 0
-        for r in reward_reversed:
+        # train -  Get discounted R
+        expected_returns = []
+        reward_history = reward_history[::-1]
+        # next_return = 0
+        next_return = self.trainer.useBaseline(problems, state).squeeze(-1)
+        for r in reward_history:
             next_return = next_return * 0.9 + r
-            flipped_returns.append(next_return)
-        probabilities = torch.stack(prob_history, 0)
-        expected_returns = torch.stack(flipped_returns[::-1], 0)
-        states = torch.stack(state_history, 0)
-        loss_dict = self.trainer.train(problems, states, expected_returns, probabilities)
-        return best_so_far, loss_dict
+            expected_returns.append(next_return)
+        actor_loss, baseline_loss = self.trainer.train(problems, torch.stack(state_history, 0), torch.stack(expected_returns[::-1], 0), torch.stack(prob_history, 0))
+        return best_so_far, actor_loss, baseline_loss, None
 
     # given a batch size and problem size will test the model
-    def test(self, n_batch, p_size, path=None):
-        problems = self.env.gen(n_batch, p_size).to(self.device) if (path is None) else self.env.load(path, n_batch).to(self.device) # generate or load problems
+    def test(self, n_batch, p_size, path=None, sample_count=1, start_s=None):
+        problems = self.env.gen(n_batch, p_size) if (path is None) else self.env.load(path, n_batch) # generate or load problems
+        problems = torch.tensor(problems, device=self.device, dtype=torch.float)
         # setup inital parameters
-        state = self.env.getStartingState(n_batch, p_size).to(self.device)
-        best_so_far = self.env.evaluate(problems, state) #[batch_size]
+        torch.cuda.synchronize(self.device)
+        stime = perf_counter()
+        if start_s is not None:
+            state = start_s
+        else:
+            state = self.env.getStartingState(n_batch, p_size, self.device)
+        best_so_far = torch.tensor(self.env.evaluate(problems, state), device=self.device, dtype=torch.float) #[batch_size]
         exchange = None
-        t = 0
         self.actor.eval()
-        while t < self.T:
+        for _ in range(0, sample_count):
             #pass through model
             _, exchange = self.actor(problems, state, exchange)
             state = self.env.step(state, exchange)
-            cost = self.env.evaluate(problems, state)
+            cost = torch.tensor(self.env.evaluate(problems, state), device=self.device, dtype=torch.float)
             best_so_far = torch.cat((best_so_far[None, :], cost[None, :]), 0).min(0)[0]
             #setup for next round
-            t += 1
-        return best_so_far
+        torch.cuda.synchronize(self.device)
+        time = perf_counter() - stime
+        return best_so_far, time, None
 
     def save(self):
         model_dict = {}
-        model_dict['actor_model_state_dict'] = self.actor.actor.state_dict()
+        model_dict['actor_model_state_dict'] = self.actor.state_dict()
         model_dict.update(self.trainer.save())
         return model_dict
 
-    def load(self, checkpoint):
-        self.actor.actor.load_state_dict(checkpoint['actor_model_state_dict'])
-        self.trainer.load(checkpoint)
+    def load(self, checkpoint, ignore_trainer=False):
+        self.actor.load_state_dict(checkpoint['actor_model_state_dict'])
+        if ignore_trainer == False:
+            self.trainer.load(checkpoint)

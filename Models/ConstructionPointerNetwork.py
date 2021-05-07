@@ -4,6 +4,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 from torch.autograd import Variable
 
+from time import perf_counter
 import math
 import random
 import numpy as np
@@ -51,9 +52,9 @@ class PtrNet(nn.Module):
     def __init__(self, model_config):
         super().__init__() #initialise nn.Module
         # defining layers and intialising them
-        dim_embedding = int(model_config['embedding'])
-        dim_model = int(model_config['hidden'])
-        n_glimpse = int(model_config['glimpse'])
+        dim_embedding = int(model_config['p_hidden'])
+        dim_model = int(model_config['p_hidden'])
+        n_glimpse = int(model_config['p_glimpse'])
         self.L_embedder = GraphEmbedding(dim_embedding)
         self.L_encoder = nn.LSTM(dim_embedding, dim_model, batch_first=True)
         self.L_decoder = nn.LSTM(dim_embedding, dim_model, batch_first=True)
@@ -71,16 +72,16 @@ class PtrNet(nn.Module):
         n_batch, n_node, _  = problems.size()
         #ENCODE PROBLEM details
         embd_graph = self.L_embedder(problems)
-        enc_states, (initial_h, initial_c) = self.L_encoder(embd_graph) # embd_graph & enc_states, [n_batch, n_node, dim_model]
-        h_c = (initial_h, initial_c) # h & c, [1, n_batch, dim_model]
+        enc_states, h_c = self.L_encoder(embd_graph) # embd_graph & enc_states, [n_batch, n_node, dim_model]
+         # h & c, [1, n_batch, dim_model]
         #setup initial variables
         mask = torch.zeros([n_batch, n_node], device=problems.device).bool()
-        dec_input = self.L_decoder_input.unsqueeze(0).repeat(n_batch, 1) # decoder_input: [n_batch, dim_embedding]
+        logits = self.L_decoder_input.unsqueeze(0).repeat(n_batch, 1) # decoder_input: [n_batch, dim_embedding]
         action_list, action_probs_list = [], [] #action_list and action_probs_list:  (step x [n_batch])
         while (len(action_list) < problems.size(1)):
-            _, h_c = self.L_decoder(dec_input.unsqueeze(1), h_c)
-            query = self.L_glimpse(h_c[0].squeeze(0), enc_states, mask)
-            logits, _ = self.L_pointer(query, enc_states) # logits is the output of the pointer network, the weights associated with each element in the sequence
+            _, h_c = self.L_decoder(logits.unsqueeze(1), h_c)
+            logits = self.L_glimpse(h_c[0].squeeze(0), enc_states, mask)
+            logits, _ = self.L_pointer(logits, enc_states) # logits is the output of the pointer network, the weights associated with each element in the sequence
             logits = logits.masked_fill(mask, float('-inf')) # mask previous actions
             probs = F.softmax(logits, dim=1) #soft max the probabilities
             actions = probs.multinomial(1).squeeze(1) if sampling else probs.argmax(dim = 1) # pick an action, actions: torch.Size([100])
@@ -90,16 +91,16 @@ class PtrNet(nn.Module):
             # action_probs_list.append(probs.gather(0, actions.unsqueeze(dim=1)))
             # update for next loop
             mask = mask.scatter(1, actions.unsqueeze(dim=-1), True)
-            dec_input = embd_graph[[i for i in range(n_batch)], actions, :] # takes the corresponding embeddedGraph[actions]
+            logits = embd_graph[[i for i in range(n_batch)], actions, :] # takes the corresponding embeddedGraph[actions]
         return torch.stack(action_probs_list, dim=1), torch.stack(action_list, dim=1)
 
 class PntrNetCritic(nn.Module):
     def __init__(self, model_config):
         super().__init__() #initialise nn.Module
-        dim_embedding = int(model_config['embedding'])
-        dim_model = int(model_config['hidden'])
-        n_glimpse = int(model_config['glimpse'])
-        n_processing = int(model_config['processing'])
+        dim_embedding = int(model_config['p_hidden'])
+        dim_model = int(model_config['p_hidden'])
+        n_glimpse = int(model_config['p_glimpse'])
+        n_processing = int(model_config['p_processing'])
         self.n_process = n_processing
         self.L_embedder = GraphEmbedding(dim_embedding)
         self.L_encoder = nn.LSTM(dim_embedding, dim_model, batch_first=True)
@@ -107,10 +108,10 @@ class PntrNetCritic(nn.Module):
         self.L_decoder = nn.Sequential(
                     nn.Linear(dim_model, dim_model, bias = False),
 			        nn.ReLU(inplace = False),
-                    nn.Linear(dim_model, 1, bias = True))
+                    nn.Linear(dim_model, 1, bias = False))
 
-    def forward(self, inputs):
-        embd_graph = self.L_embedder(inputs)
+    def forward(self, problems, states):
+        embd_graph = self.L_embedder(problems)
         enc_states, (h, c) = self.L_encoder(embd_graph) # encoder_states: torch.Size([n_batch, n_node, dim_model])
         query = h.squeeze(0) #the hidden step after all the elements of the sequence were processed
         for i in range(self.n_process):
@@ -127,41 +128,61 @@ class PntrNetCritic(nn.Module):
 #how the model output is returned into reward and probability
 class PtrNetWrapped: #wrapper for model
     # creates the everything around the networks
-    def __init__(self, env, trainer, device, model_config, optimizer_config): # hyperparameteres
+    def __init__(self, env, trainer, device, config): # hyperparameteres
         self.env = env
         self.trainer = trainer
         self.device = device
-        self.actor = PtrNet(model_config).to(self.device)
-        self.trainer.passIntoParameters(self.actor.parameters(), optimizer_config)
+        self.actor = PtrNet(config).to(self.device)
+        self.trainer.passIntoParameters(self.actor.parameters(), config)
 
     # given a problem size and batch size will train the model
     def train_batch(self, n_batch, p_size, path=None):
-        problems = self.env.gen(n_batch, p_size).to(self.device) if (path is None) else self.env.load(path, n_batch).to(self.device) # generate or load problems
+        problems = self.env.gen(n_batch, p_size) if (path is None) else self.env.load(path, n_batch) # generate or load problems
+        problems = torch.tensor(problems, device=self.device, dtype=torch.float)
         # run through the model
         self.actor.train()
+        torch.cuda.synchronize(self.device)
+        stime = perf_counter()
         action_probs_list, action_list = self.actor(problems, sampling=True) #action_probs_list (n_node x [n_batch])
+        torch.cuda.synchronize(self.device)
+        print("actor forward pass time:{}".format(perf_counter() - stime))
         # calculate reward and probability
-        reward = self.env.evaluate(problems, action_list).to(self.device)
+        reward = torch.tensor(self.env.evaluate(problems, action_list), device=self.device, dtype=torch.float)
+        # with torch.autograd.profiler.profile(use_cuda=True, profile_memory=True, with_stack=True) as prof:
         probs = action_probs_list.prod(dim=1)
         # use this to train
-        loss_dict = self.trainer.train(problems, action_list.unsqueeze(dim=0), reward.unsqueeze(dim=0), probs.unsqueeze(dim=0))
-        return reward, loss_dict
+        actor_loss, baseline_loss = self.trainer.train(problems, action_list.unsqueeze(dim=0), reward.unsqueeze(dim=0), probs.unsqueeze(dim=0))
+        # print(prof.key_averages().table(sort_by="self_cpu_time_total"))
+        return reward, actor_loss, baseline_loss
 
     # given a batch size and problem size will test the model
-    def test(self, n_batch, p_size, path=None):
-        problems = self.env.gen(n_batch, p_size).to(self.device) if (path is None) else self.env.load(path, n_batch).to(self.device) # generate or load problems
+    def test(self, n_batch, p_size, path=None, sample_count=1):
+        problems = self.env.gen(n_batch, p_size) if (path is None) else self.env.load(path, n_batch) # generate or load problems
+        problems = torch.tensor(problems, device=self.device, dtype=torch.float)
         # run through model
+        best_so_far = None
+        torch.cuda.synchronize(self.device)
+        stime = perf_counter()
         self.actor.eval()
-        action_probs_list, action_list = self.actor(problems, sampling=True)
-        reward = self.env.evaluate(problems, action_list).to(self.device)
-        return reward
+        for _ in range(sample_count):
+            action_probs_list, action_list = self.actor(problems, sampling=True)
+            reward = torch.tensor(self.env.evaluate(problems, action_list), device=self.device, dtype=torch.float)
+            if best_so_far is None:
+                best_so_far = reward
+            else:
+                best_so_far = torch.cat((best_so_far[None, :], reward[None, :]), 0).min(0)[0]
+            print(best_so_far[0:10])
+        torch.cuda.synchronize(self.device)
+        time = perf_counter() - stime
+        return best_so_far, time, action_list #will return latest state, not best
 
     def save(self):
         model_dict = {}
-        model_dict['actor_model_state_dict'] = self.actor.actor.state_dict()
+        model_dict['actor_model_state_dict'] = self.actor.state_dict()
         model_dict.update(self.trainer.save())
         return model_dict
 
-    def load(self, checkpoint):
-        self.actor.actor.load_state_dict(checkpoint['actor_model_state_dict'])
-        self.trainer.load(checkpoint)
+    def load(self, checkpoint, ignore_trainer=False):
+        self.actor.load_state_dict(checkpoint['actor_model_state_dict'])
+        if ignore_trainer == False:
+            self.trainer.load(checkpoint)

@@ -5,20 +5,21 @@ from torch.autograd import Variable
 
 import numpy as np
 import math
+from time import perf_counter
 
 from Models.GeneralLayers import GraphEmbedding, SkipConnection, MultiHeadAttention, FeedForward, TransformerEncoderL
 
 class Transformer(nn.Module):
     def __init__(self, model_config):
         super().__init__() #initialise nn.Modules
-        n_layers = int(model_config['n_layers'])
-        n_head = int(model_config['n_head'])
-        dim_model = int(model_config['dim_model'])
-        dim_hidden = int(model_config['dim_hidden'])
-        dim_k = int(model_config['dim_k'])
-        dim_v = int(model_config['dim_v'])
+        n_layers = int(model_config['t_n_layers'])
+        n_head = int(model_config['t_n_head'])
+        dim_model = int(model_config['t_dim_model'])
+        dim_hidden = dim_model
+        dim_v = int(model_config['t_dim_v'])
+        dim_k = dim_v
         self.L_embedder = GraphEmbedding(dim_model, usePosEncoding=False)
-        self.L_encoder = nn.Sequential(*(TransformerEncoderL(n_head, dim_model, dim_hidden, dim_k, dim_v) for _ in range(n_layers)))
+        self.L_encoder = nn.Sequential(*(TransformerEncoderL(n_head, dim_model, dim_hidden, dim_k, dim_v, momentum=0.3) for _ in range(n_layers)))
         self.L_graph_context = nn.Linear(dim_model, dim_model, bias=False)
         self.L_node_context = nn.Linear(dim_model, dim_model, bias=False)
         self.L_decoder_attention = MultiHeadAttention(dim_model*3, dim_k, dim_v, n_head, dim_k_input=dim_model, dim_v_input=dim_model)
@@ -57,46 +58,91 @@ class Transformer(nn.Module):
                 first = last
         return torch.stack(action_probs_list, dim=1), torch.stack(action_list, dim=1)
 
+class TransformerCritic(nn.Module):
+    def __init__(self, model_config):
+        super().__init__() #initialise nn.Modules
+        n_layers = int(model_config['t_n_layers'])
+        n_head = int(model_config['t_n_head'])
+        dim_model = int(model_config['t_dim_model'])
+        dim_hidden = dim_model
+        dim_v = int(model_config['t_dim_v'])
+        dim_k = dim_v
+        self.L_embedder = GraphEmbedding(dim_model, usePosEncoding=False)
+        self.L_encoder = nn.Sequential(*(TransformerEncoderL(n_head, dim_model, dim_hidden, dim_k, dim_v, momentum=0.3) for _ in range(n_layers)))
+        self.L_decoder = nn.Sequential(
+                    nn.Linear(dim_model, dim_model, bias = False),
+			        nn.ReLU(inplace = False),
+                    nn.Linear(dim_model, 1, bias = False))
+
+    def forward(self, problems, states):
+        n_batch, n_node, _ = problems.size()
+        #ENCODE PROBLEM - invariant so must be problem
+        query = self.L_embedder(problems, None)
+        query = self.L_encoder(query).mean(dim=1, keepdim=True) # [n_batch, 1, dim_model]
+        query = self.L_decoder(query).squeeze(-1)
+        return query
+
 class TransformerWrapped:
         # creates the everything around the networks
-        def __init__(self, env, trainer, device, model_config, optimizer_config): # hyperparameteres
+        def __init__(self, env, trainer, device, config): # hyperparameteres
             self.env = env
             self.trainer = trainer
             self.device = device
-            self.actor = Transformer(model_config).to(self.device)
-            self.trainer.passIntoParameters(self.actor.parameters(), optimizer_config)
+            self.actor = Transformer(config).to(self.device)
+            self.trainer.passIntoParameters(self.actor.parameters(), config)
 
         # given a problem size and batch size will train the model
         def train_batch(self, n_batch, p_size, path=None):
-            problems = self.env.gen(n_batch, p_size).to(self.device) if (path is None) else self.env.load(path, n_batch).to(self.device) # generate or load problems
+            problems = self.env.gen(n_batch, p_size) if (path is None) else self.env.load(path, n_batch) # generate or load problems
+            problems = torch.tensor(problems, device=self.device, dtype=torch.float)
             # run through the model
             self.actor.train()
+            # with torch.autograd.profiler.profile(use_cuda=True, profile_memory=True, with_stack=True) as prof:
+            torch.cuda.synchronize(self.device)
+            stime = perf_counter()
             action_probs_list, action_list = self.actor(problems, sampling=True)
-            # calculate reward and probability
-            reward = self.env.evaluate(problems, action_list).to(self.device)
-            probs = action_probs_list.prod(dim=1)
+            torch.cuda.synchronize(self.device)
+            print("actor forward pass time:{}".format(perf_counter() - stime))
+            # print("forward", prof.key_averages().table(sort_by="self_cpu_time_total"))
             # use this to train
-            loss_dict = self.trainer.train(problems, action_list.unsqueeze(dim=0), reward.unsqueeze(dim=0), probs.unsqueeze(dim=0))
-            return reward, loss_dict
+            # with torch.autograd.profiler.profile(use_cuda=True, profile_memory=True, with_stack=True) as prof:
+            # calculate reward and probability
+            reward = torch.tensor(self.env.evaluate(problems, action_list), device=self.device, dtype=torch.float)
+            probs = action_probs_list.prod(dim=1)
+            actor_loss, baseline_loss = self.trainer.train(problems, action_list.unsqueeze(dim=0), reward.unsqueeze(dim=0), probs.unsqueeze(dim=0))
+            # print(prof.key_averages().table(sort_by="self_cpu_time_total"))
+            return reward, actor_loss, baseline_loss, action_list
 
         # given a batch size and problem size will test the model
-        def test(self, n_batch, p_size, path=None):
-            problems = self.env.gen(n_batch, p_size).to(self.device) if (path is None) else self.env.load(path, n_batch).to(self.device) # generate or load problems
+        def test(self, n_batch, p_size, path=None, sample_count=1):
+            problems = self.env.gen(n_batch, p_size) if (path is None) else self.env.load(path, n_batch) # generate or load problems
+            problems = torch.tensor(problems, device=self.device, dtype=torch.float)
             # run through model
+            best_so_far = None
+            torch.cuda.synchronize(self.device)
+            stime = perf_counter()
             self.actor.eval()
-            action_probs_list, action_list = self.actor(problems, sampling=True)
-            reward = self.env.evaluate(problems, action_list).to(self.device)
-            return reward
+            for _ in range(sample_count):
+                action_probs_list, action_list = self.actor(problems, sampling=True)
+                reward = torch.tensor(self.env.evaluate(problems, action_list), device=self.device, dtype=torch.float)
+                if best_so_far is None:
+                    best_so_far = reward
+                else:
+                    best_so_far = torch.cat((best_so_far[None, :], reward[None, :]), 0).min(0)[0]
+            torch.cuda.synchronize(self.device)
+            time = perf_counter() - stime
+            return best_so_far, time, action_list
 
         def save(self):
             model_dict = {}
-            model_dict['actor_model_state_dict'] = self.actor.actor.state_dict()
+            model_dict['actor_model_state_dict'] = self.actor.state_dict()
             model_dict.update(self.trainer.save())
             return model_dict
 
-        def load(self, checkpoint):
-            self.actor.actor.load_state_dict(checkpoint['actor_model_state_dict'])
-            self.trainer.load(checkpoint)
+        def load(self, checkpoint, ignore_trainer=False):
+            self.actor.load_state_dict(checkpoint['actor_model_state_dict'])
+            if ignore_trainer == False:
+                self.trainer.load(checkpoint)
 
 # generate problems
 # problems = torch.FloatTensor(self.env.genProblems(batch_size, problem_size))

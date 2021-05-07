@@ -2,3 +2,6 @@ Misc/copt.pyd
 Misc/__pycache__/
 Models/__pycache__/
 RLAlgorithm/__pycache__/
+runs/
+HPO/
+runsGPUCloud/
