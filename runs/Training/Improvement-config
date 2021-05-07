@@ -1,0 +1,21 @@
+{
+    "run": "6",
+    "model": "TSP_improve",
+    "environment": "Improvement",
+    "data_path": "DATA_Testing/SeqLen5-ImprovementNetwork",
+    "save_csv": "True",
+    "save_tensor": "True",
+    "n_batch": "10",
+    "n_batch_train_size": "512",
+    "n_batch_test_size": "5120",
+    "baseline_type": "Critic",
+    "n_layers": 1,
+    "n_head": 1,
+    "dim_model": 128,
+    "dim_hidden": 64,
+    "dim_v": 64,
+    "max_grad": 2,
+    "learning_rate": 0.0001,
+    "learning_rate_gamma": 1.0,
+    "t": "1"
+}
