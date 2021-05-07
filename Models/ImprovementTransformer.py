@@ -45,12 +45,12 @@ class Compatability(nn.Module):
 class TSP_improve(nn.Module):
     def __init__(self, model_config):
         super().__init__() #initialise nn.Modules
-        dim_model = int(model_config['dim_model'])
-        dim_hidden = int(model_config['dim_hidden'])
-        dim_v = int(model_config['dim_v'])
+        dim_model = int(model_config['i_dim_model'])
+        dim_hidden = int(model_config['i_dim_hidden'])
+        dim_v = int(model_config['i_dim_v'])
         dim_k = dim_v
-        n_layers = int(model_config['n_layers'])
-        n_head = int(model_config['n_head'])
+        n_layers = int(model_config['i_n_layers'])
+        n_head = int(model_config['i_n_head'])
         self.L_embedder = GraphEmbedding(dim_model, usePosEncoding=True)
         self.L_encoder = nn.Sequential(*(TransformerEncoderL(n_head, dim_model, dim_hidden, dim_k, dim_v) for _ in range(n_layers)))
         self.L_project_graph = nn.Linear(dim_model, dim_model, bias=False)
@@ -79,12 +79,12 @@ class TSP_improve(nn.Module):
 class TSP_improveCritic(nn.Module):
     def __init__(self, model_config):
         super().__init__() #initialise nn.Modules
-        dim_model = int(model_config['dim_model'])
-        dim_hidden = int(model_config['dim_hidden'])
-        dim_v = int(model_config['dim_v'])
+        dim_model = int(model_config['i_dim_model'])
+        dim_hidden = int(model_config['i_dim_hidden'])
+        dim_v = int(model_config['i_dim_v'])
         dim_k = dim_v
-        n_layers = int(model_config['n_layers'])
-        n_head = int(model_config['n_head'])
+        n_layers = int(model_config['i_n_layers'])
+        n_head = int(model_config['i_n_head'])
         self.L_embedder = GraphEmbedding(dim_model, usePosEncoding=True)
         self.L_encoder = nn.Sequential(*(TransformerEncoderL(n_head, dim_model, dim_hidden, dim_k, dim_v) for _ in range(n_layers)))
         self.L_project_graph = nn.Linear(dim_model, dim_model, bias=False)
@@ -117,12 +117,15 @@ class TSP_improveWrapped:
         self.T = int(config['t'])
 
     # given a problem size and batch size will train the model
-    def train_batch(self, n_batch, p_size, path=None):
+    def train_batch(self, n_batch, p_size, path=None, start_s=None):
         # with torch.autograd.profiler.profile(use_cuda=True, profile_memory=True, with_stack=True) as prof:
         problems = self.env.gen(n_batch, p_size) if (path is None) else self.env.load(path, n_batch) # generate or load problems
         problems = torch.tensor(problems, device=self.device, dtype=torch.float)
         # setup inital parameters
-        state = self.env.getStartingState(n_batch, p_size, self.device)
+        if start_s is not None:
+            state = start_s
+        else:
+            state = self.env.getStartingState(n_batch, p_size, self.device)
         best_so_far = torch.tensor(self.env.evaluate(problems, state), device=self.device, dtype=torch.float)
         # print(prof.key_averages().table(sort_by="self_cpu_time_total"))
         exchange = None
@@ -156,16 +159,19 @@ class TSP_improveWrapped:
             next_return = next_return * 0.9 + r
             expected_returns.append(next_return)
         actor_loss, baseline_loss = self.trainer.train(problems, torch.stack(state_history, 0), torch.stack(expected_returns[::-1], 0), torch.stack(prob_history, 0))
-        return best_so_far, actor_loss, baseline_loss
+        return best_so_far, actor_loss, baseline_loss, None
 
     # given a batch size and problem size will test the model
-    def test(self, n_batch, p_size, path=None, sample_count=1):
+    def test(self, n_batch, p_size, path=None, sample_count=1, start_s=None):
         problems = self.env.gen(n_batch, p_size) if (path is None) else self.env.load(path, n_batch) # generate or load problems
         problems = torch.tensor(problems, device=self.device, dtype=torch.float)
         # setup inital parameters
         torch.cuda.synchronize(self.device)
         stime = perf_counter()
-        state = self.env.getStartingState(n_batch, p_size, self.device)
+        if start_s is not None:
+            state = start_s
+        else:
+            state = self.env.getStartingState(n_batch, p_size, self.device)
         best_so_far = torch.tensor(self.env.evaluate(problems, state), device=self.device, dtype=torch.float) #[batch_size]
         exchange = None
         self.actor.eval()
@@ -178,7 +184,7 @@ class TSP_improveWrapped:
             #setup for next round
         torch.cuda.synchronize(self.device)
         time = perf_counter() - stime
-        return best_so_far, time
+        return best_so_far, time, None
 
     def save(self):
         model_dict = {}
@@ -186,6 +192,7 @@ class TSP_improveWrapped:
         model_dict.update(self.trainer.save())
         return model_dict
 
-    def load(self, checkpoint):
+    def load(self, checkpoint, ignore_trainer=False):
         self.actor.load_state_dict(checkpoint['actor_model_state_dict'])
-        self.trainer.load(checkpoint)
+        if ignore_trainer == False:
+            self.trainer.load(checkpoint)

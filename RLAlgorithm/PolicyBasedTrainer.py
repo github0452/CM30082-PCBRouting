@@ -56,11 +56,12 @@ class Critic:
     def __init__(self, device, critic_config):
         self.type = 'critic'
         self.device = device
+        print(critic_config['model'])
         if critic_config['model'] == 'PointerNetwork':
             self.critic = PntrNetCritic(critic_config).to(device)
         elif critic_config['model'] == 'Transformer':
             self.critic = TransformerCritic(critic_config).to(device)
-        elif critic_config['model'] == 'TSP_improve':
+        elif critic_config['model'] == 'TSP_improve' or critic_config['model'] == 'StackedNetwork':
             self.critic = TSP_improveCritic(critic_config).to(device)
         self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=float(critic_config['learning_rate']))
         self.critic_scheduler = torch.optim.lr_scheduler.StepLR(self.critic_optimizer, step_size=1, gamma=float(critic_config['learning_rate_gamma']))
@@ -104,6 +105,7 @@ class Critic:
 class Reinforce:
     def __init__(self, device, baseline_config):
         self.baseline_type = baseline_config['baseline_type']
+        self.device = device
         if self.baseline_type == 'ExpMovingAvg':
             self.baseline = ExpMovingAvg(device, baseline_config)
         elif self.baseline_type == 'Critic':

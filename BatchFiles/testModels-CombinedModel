@@ -1,0 +1,43 @@
+#!/bin/bash
+N_NODES=(5 8) #
+# MODELS=("Pointer" "Transformer" "Improvement")
+MODELS=("Pointer" "Transformer")
+EPOCH=3
+FILTER_NO_SOL=True
+# for filename in ./runs/configFiles/Transformer-*; do
+# for p_size in "${N_NODES[@]}"; do
+# 	SAMPLING=(2 ${p_size})
+# 	for model in "${MODELS[@]}"; do
+# 		for sample in "${SAMPLING[@]}"; do
+# 			folder_name="runs/StackedTraining/${p_size}${model}"
+# 			config_name="runs/StackedTraining/${model}-config"
+# 			dataset_name="datasets/n${p_size}b5120.pkg"
+# 			tsp python3 runMultiModel.py $config_name $folder_name $EPOCH $p_size $FILTER_NO_SOL $sample $dataset_name
+# 		done
+# 	done
+# done
+
+# # for filename in ./runs/configFiles/Transformer-*; do
+# for p_size in "${N_NODES[@]}"; do
+# 	for p_test in {3..9}; do
+# 		SAMPLING=$((${p_test}+1))
+# 		for model in "${MODELS[@]}"; do
+# 			folder_name="runs/StackedTraining/${p_size}${model}"
+# 			config_name="runs/StackedTraining/${model}-config"
+# 			dataset_name="datasets/n${p_test}b5120.pkg"
+# 			tsp python3 runMultiModel.py $config_name $folder_name $EPOCH $p_test $FILTER_NO_SOL $SAMPLING $dataset_name
+# 		done
+# 	done
+# done
+
+for p_size in "${N_NODES[@]}"; do
+	for model in "${MODELS[@]}"; do
+		SAMPLING=(2 $((${p_size}+1)) $((${p_size}*2 + 1)) $((${p_size}*3 + 1)) $((${p_size}*4 + 1)) $((${p_size}*5 + 1)))
+		for sample in "${SAMPLING[@]}"; do
+			folder_name="runs/StackedTraining/${p_size}${model}"
+			config_name="runs/StackedTraining/${model}-config"
+			dataset_name="datasets/n${p_size}b5120.pkg"
+			tsp python3 runMultiModel.py $config_name $folder_name $EPOCH $p_size $FILTER_NO_SOL $sample $dataset_name
+		done
+	done
+done

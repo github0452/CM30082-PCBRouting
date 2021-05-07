@@ -52,9 +52,9 @@ class PtrNet(nn.Module):
     def __init__(self, model_config):
         super().__init__() #initialise nn.Module
         # defining layers and intialising them
-        dim_embedding = int(model_config['hidden'])
-        dim_model = int(model_config['hidden'])
-        n_glimpse = int(model_config['glimpse'])
+        dim_embedding = int(model_config['p_hidden'])
+        dim_model = int(model_config['p_hidden'])
+        n_glimpse = int(model_config['p_glimpse'])
         self.L_embedder = GraphEmbedding(dim_embedding)
         self.L_encoder = nn.LSTM(dim_embedding, dim_model, batch_first=True)
         self.L_decoder = nn.LSTM(dim_embedding, dim_model, batch_first=True)
@@ -97,10 +97,10 @@ class PtrNet(nn.Module):
 class PntrNetCritic(nn.Module):
     def __init__(self, model_config):
         super().__init__() #initialise nn.Module
-        dim_embedding = int(model_config['hidden'])
-        dim_model = int(model_config['hidden'])
-        n_glimpse = int(model_config['glimpse'])
-        n_processing = int(model_config['processing'])
+        dim_embedding = int(model_config['p_hidden'])
+        dim_model = int(model_config['p_hidden'])
+        n_glimpse = int(model_config['p_glimpse'])
+        n_processing = int(model_config['p_processing'])
         self.n_process = n_processing
         self.L_embedder = GraphEmbedding(dim_embedding)
         self.L_encoder = nn.LSTM(dim_embedding, dim_model, batch_first=True)
@@ -174,7 +174,7 @@ class PtrNetWrapped: #wrapper for model
             print(best_so_far[0:10])
         torch.cuda.synchronize(self.device)
         time = perf_counter() - stime
-        return best_so_far, time
+        return best_so_far, time, action_list #will return latest state, not best
 
     def save(self):
         model_dict = {}
@@ -182,6 +182,7 @@ class PtrNetWrapped: #wrapper for model
         model_dict.update(self.trainer.save())
         return model_dict
 
-    def load(self, checkpoint):
+    def load(self, checkpoint, ignore_trainer=False):
         self.actor.load_state_dict(checkpoint['actor_model_state_dict'])
-        self.trainer.load(checkpoint)
+        if ignore_trainer == False:
+            self.trainer.load(checkpoint)

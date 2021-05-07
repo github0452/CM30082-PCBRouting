@@ -43,7 +43,7 @@ class GraphEmbedding(nn.Module):
         if self.usePosEncoding:
             posEncoding = self.getPosEnco(positions)
         embedding = self.L_embedding(inputs)
-        return embedding + posEncoding[:embedding.size(0)]
+        return embedding + posEncoding#[:embedding.size(0)]
 
 class SkipConnection(nn.Module):
     def __init__(self, module):

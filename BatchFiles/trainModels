@@ -1,0 +1,17 @@
+#!/bin/bash
+N_NODES=(5) #
+MODELS=("Pointer" "Transformer" "Improvement")
+EPOCH=10
+FILTER_NO_SOL=False
+# for filename in ./runs/configFiles/Transformer-*; do
+for p_size in "${N_NODES[@]}"; do
+	folder="runs/Training/SeqLen${p_size}"
+	config="runs/Training/config"
+	for model in "${MODELS[@]}"; do
+		for i in {0..8}; do
+			folder_name="${folder}/${model}_run${i}"
+			config_name="${config}/${model}-config"
+			tsp python3 main.py train $config_name $folder_name $EPOCH $p_size $FILTER_NO_SOL
+		done
+	done
+done

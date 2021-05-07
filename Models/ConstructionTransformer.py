@@ -12,11 +12,11 @@ from Models.GeneralLayers import GraphEmbedding, SkipConnection, MultiHeadAttent
 class Transformer(nn.Module):
     def __init__(self, model_config):
         super().__init__() #initialise nn.Modules
-        n_layers = int(model_config['n_layers'])
-        n_head = int(model_config['n_head'])
-        dim_model = int(model_config['dim_model'])
+        n_layers = int(model_config['t_n_layers'])
+        n_head = int(model_config['t_n_head'])
+        dim_model = int(model_config['t_dim_model'])
         dim_hidden = dim_model
-        dim_v = int(model_config['dim_v'])
+        dim_v = int(model_config['t_dim_v'])
         dim_k = dim_v
         self.L_embedder = GraphEmbedding(dim_model, usePosEncoding=False)
         self.L_encoder = nn.Sequential(*(TransformerEncoderL(n_head, dim_model, dim_hidden, dim_k, dim_v, momentum=0.3) for _ in range(n_layers)))
@@ -61,11 +61,11 @@ class Transformer(nn.Module):
 class TransformerCritic(nn.Module):
     def __init__(self, model_config):
         super().__init__() #initialise nn.Modules
-        n_layers = int(model_config['n_layers'])
-        n_head = int(model_config['n_head'])
-        dim_model = int(model_config['dim_model'])
+        n_layers = int(model_config['t_n_layers'])
+        n_head = int(model_config['t_n_head'])
+        dim_model = int(model_config['t_dim_model'])
         dim_hidden = dim_model
-        dim_v = int(model_config['dim_v'])
+        dim_v = int(model_config['t_dim_v'])
         dim_k = dim_v
         self.L_embedder = GraphEmbedding(dim_model, usePosEncoding=False)
         self.L_encoder = nn.Sequential(*(TransformerEncoderL(n_head, dim_model, dim_hidden, dim_k, dim_v, momentum=0.3) for _ in range(n_layers)))
@@ -111,7 +111,7 @@ class TransformerWrapped:
             probs = action_probs_list.prod(dim=1)
             actor_loss, baseline_loss = self.trainer.train(problems, action_list.unsqueeze(dim=0), reward.unsqueeze(dim=0), probs.unsqueeze(dim=0))
             # print(prof.key_averages().table(sort_by="self_cpu_time_total"))
-            return reward, actor_loss, baseline_loss
+            return reward, actor_loss, baseline_loss, action_list
 
         # given a batch size and problem size will test the model
         def test(self, n_batch, p_size, path=None, sample_count=1):
@@ -131,7 +131,7 @@ class TransformerWrapped:
                     best_so_far = torch.cat((best_so_far[None, :], reward[None, :]), 0).min(0)[0]
             torch.cuda.synchronize(self.device)
             time = perf_counter() - stime
-            return best_so_far, time
+            return best_so_far, time, action_list
 
         def save(self):
             model_dict = {}
@@ -139,9 +139,10 @@ class TransformerWrapped:
             model_dict.update(self.trainer.save())
             return model_dict
 
-        def load(self, checkpoint):
+        def load(self, checkpoint, ignore_trainer=False):
             self.actor.load_state_dict(checkpoint['actor_model_state_dict'])
-            self.trainer.load(checkpoint)
+            if ignore_trainer == False:
+                self.trainer.load(checkpoint)
 
 # generate problems
 # problems = torch.FloatTensor(self.env.genProblems(batch_size, problem_size))

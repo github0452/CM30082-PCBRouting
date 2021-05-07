@@ -1,5 +1,8 @@
-import os
+# from main import TrainTest2
 import sys
+import json
+import os
+import sys, getopt
 import csv
 import time
 import datetime
@@ -18,13 +21,14 @@ from Misc.Environments import Construction, Improvement
 from Models.ConstructionPointerNetwork import PtrNetWrapped
 from Models.ImprovementTransformer import TSP_improveWrapped
 from Models.ConstructionTransformer import TransformerWrapped
+from Models.CombinedPointer import ImprovedTransformerWrapped
 from RLAlgorithm.PolicyBasedTrainer import Reinforce
 
 class TrainTest:
     def __init__(self, config, routableOnly=False):
         print("using config:", config)
         # check device
-        device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
         # setup data stuff
         data_path = config['data_path']
         Path(data_path).mkdir(parents=True, exist_ok=True)
@@ -42,14 +46,18 @@ class TrainTest:
         self.n_batch_test_size = int(config['n_batch_test_size'])
         #=-=-=-=-=-=-=ENVIRONMENTS and TRAINER=-=-=-=-===-=-=-=-=-=-=
         env = {'Construction': Construction(routableOnly), 'Improvement': Improvement(routableOnly)}.get(config['environment'])
-        trainer = Reinforce(device, config)
+        trainer = Reinforce(self.device, config)
         #=-=-=-=-===-=-=-=-=-=-=MODEL=-=-=-=-===-=-=-=-=-=-=
         model_type = config['model']
-        if model_type == 'PointerNetwork': self.wrapped_actor = PtrNetWrapped(env, trainer, device, config)
-        elif model_type == 'Transformer': self.wrapped_actor = TransformerWrapped(env, trainer, device, config)
-        elif model_type == 'TSP_improve': self.wrapped_actor = TSP_improveWrapped(env, trainer, device, config)
-        # self.load()
+        if model_type == 'PointerNetwork': self.wrapped_actor = PtrNetWrapped(env, trainer, self.device, config)
+        elif model_type == 'Transformer': self.wrapped_actor = TransformerWrapped(env, trainer, self.device, config)
+        elif model_type == 'TSP_improve': self.wrapped_actor = TSP_improveWrapped(env, trainer, self.device, config)
+        elif model_type == 'StackedNetwork': self.wrapped_actor = ImprovedTransformerWrapped(env, trainer, self.device, config)
+        self.load()
 
+    """
+    Train Model
+    """
     def train(self, p_size, prob_path=None):
         # loop through batches
         init = self.n_epoch*self.n_batch
@@ -65,11 +73,7 @@ class TrainTest:
             if torch.is_tensor(actor_loss):
                 actor_loss = actor_loss.item()
             if self.csv is not None:
-                if not os.path.isfile(self.csv['train']):
-                    with open(self.csv['train'], 'w', newline='') as file:
-                        csv.writer(file).writerow(["step", "AvgRoutedR", "AvgR", "AvgRouted%", "ActorLoss", "BaselineLoss"])
-                with open(self.csv['train'], 'a', newline='') as file:
-                    csv.writer(file).writerow([i, avgRoutedR, avgR, percRouted, actor_loss, baseline_loss])
+                self.save_data(i, avgRoutedR, avgR, percRouted, actor_loss, baseline_loss)
             if self.tensor is not None:
                 t_board = SummaryWriter(self.tensor)
                 t_board.add_scalar('Train/AvgRoutedR', avgRoutedR, global_step = i)
@@ -80,6 +84,23 @@ class TrainTest:
         print("Epoch: {0}, Prob size: {1}, avgRoutedR: {2}, percRouted: {3}".format(self.n_epoch, p_size, avgRoutedR, percRouted))
         self.n_epoch += 1
 
+    def save_data(self, i, avgRoutedR, avgR, percRouted, actor_loss, baseline_loss):
+        errors = 0
+        try:
+          if not os.path.isfile(self.csv['train']):
+              with open(self.csv['train'], 'w', newline='') as file:
+                  csv.writer(file).writerow(["step", "AvgRoutedR", "AvgR", "AvgRouted%", "ActorLoss", "BaselineLoss"])
+          with open(self.csv['train'], 'a', newline='') as file:
+              csv.writer(file).writerow([i, avgRoutedR, avgR, percRouted, actor_loss, baseline_loss])
+        except:
+            errors += 1
+            print("Errors ", errors)
+            if errors < 10:
+                self.save_data(i, avgRoutedR, avgR, percRouted, actor_loss, baseline_loss)
+
+    """
+    Test Model
+    """
     def test(self, p_size, prob_path=None, sample_count=1):
         # run tests
         R, time = self.wrapped_actor.test(self.n_batch_test_size, p_size, path=prob_path, sample_count=sample_count)
@@ -103,82 +124,61 @@ class TrainTest:
         print("Epoch: {0}, Prob size: {1}, avgRoutedR: {2}, percRouted: {3}, time: {4}"
             .format(self.n_epoch, p_size, avgRoutedR, percRouted, time))
 
+    """
+    Save checkpoint
+    """
     def save(self):
-        path = "{0}-{1}".format(self.model_name, self.n_epoch)
-        model_dict = self.wrapped_actor.save() #save training details
-        model_dict['n_epoch'] = self.n_epoch
-        torch.save(model_dict, self.model_name)
+        errors = 0
+        try:
+          path = "{0}-{1}".format(self.model_name, self.n_epoch)
+          model_dict = self.wrapped_actor.save() #save training details
+          model_dict['n_epoch'] = self.n_epoch
+          torch.save(model_dict, path)
+        except:
+            errors += 1
+            print("Errors ", errors)
+            if errors < 10:
+                self.save()
 
-    # def extract_number(f):
-    # s = re.findall("\d+$",f)
-    # return (int(s[0]) if s else -1,f)
 
+    """
+    Load checkpoint
+    """
     def load(self):
-        # max(list_of_files,key=extract_number)
-        # path = "{0}-{1}".format(self.model_name, 55)
         if os.path.exists(self.model_name):
-            checkpoint = torch.load(self.model_name)
+            checkpoint = torch.load(self.model_name, map_location=self.device)
             self.wrapped_actor.load(checkpoint) #load training details
             self.n_epoch = checkpoint['n_epoch']
             print('Loaded with', self.n_epoch, 'epochs.')
         else:
             print('weights not found for', self.model_name)
-#
-# config = {
-#     'model': 'TSP_improve',
-#     'environment': 'Improvement',
-#     'data_path': 'runs/ImprTransformerCritic2',
-#     'save_csv': False,
-#     'save_tensor': False,
-#     'n_batch': '10',
-#     'n_batch_train_size': '512',
-#     'n_batch_test_size': '2048',
-#     'baseline_type': 'Critic',
-#     'n_layers': '2',
-#     'n_head': '1',
-#     'dim_model': '128',
-#     'dim_hidden': '64',
-#     'dim_v': '32',
-#     'dim_k': '32',
-#     'max_grad': '2',
-#     'learning_rate': '1e-4',
-#     'learning_rate_gamma': '1',
-#     't': '1'
-# }
-# N_EPOCHS = 1
-# N_NODES = 7
-# def trace(frame, event, arg):
-#     print("%s, %s:%d" % (event, frame.f_code.co_filename, frame.f_lineno))
-#     return trace
-# sys.settrace(trace)
+
+# get arguments
+print(sys.argv)
 purpose = sys.argv[1]
 config_location = sys.argv[2]
-N_EPOCHS = int(sys.argv[3])
-N_NODES = int(sys.argv[4])
-FILTER_NOSOLPROB = bool(sys.argv[5])
+folder_location = sys.argv[3]
+n_epochs = int(sys.argv[4])
+p_size = int(sys.argv[5])
+filter_no_sol_prob = bool(sys.argv[6])
+if purpose == "test":
+    sample_count = int(sys.argv[7])
+    dataset = sys.argv[8]
+print("Number of epochs: {0}".format(n_epochs))
+# load config
 with open(config_location) as json_file:
     config = json.load(json_file)
-agent = TrainTest(config=config, routableOnly=FILTER_NOSOLPROB)
-print("Number of epochs: {0}".format(N_EPOCHS))
-# for epoch in range(0, n_epochs):
-agent.load()
-for epoch in range(0, N_EPOCHS):
-    if purpose == "test":
-        sample_count = int(sys.argv[6])
-        dataset = sys.argv[7]
-        agent.test(N_NODES, prob_path=dataset, sample_count=sample_count)
-        # agent.save()
-        # agent.load()
-    elif purpose == "train":
-        agent.train(N_NODES)#, path=file)
+    config['data_path'] = folder_location #overwriting
+# run stuff
+print("Running with config: ", config)
+
+agent = TrainTest(config=config, routableOnly=filter_no_sol_prob)
+if purpose == "test":
+   for epoch in range(n_epochs):
+        agent.test(p_size, prob_path=dataset, sample_count=sample_count)
+elif purpose == "train":
+    for epoch in range(n_epochs):
+        agent.train(p_size)#, path=file)
         agent.save()
-    elif purpose == "generalisation":
-        sample_count = 1
-        for i in [3, 4, 5, 6]:
-            dataset = "datasets/n{0}b5120.pkg".format(i)
-            for _ in range(10):
-                agent.test(i, prob_path=dataset, sample_count=i)
-        for i in [7, 8]:
-            dataset = "datasets/n{0}b5120.pkg".format(i)
-            for _ in range(10):
-                agent.test(i, prob_path=dataset, sample_count=i)
+else:
+    print("Invalid purpose")
